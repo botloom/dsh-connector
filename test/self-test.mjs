@@ -221,7 +221,7 @@ async function main() {
   check('dispatch 走 tcp', (await probeConnection(tcpConn, 3000)).detail.includes('端口可达'))
 
   // ---------- store ----------
-  const { applyConnectionChange, draftConnection } = await load('lib/store.js')
+  const { applyConnectionChange, applyImport, draftConnection, exportPayload } = await load('lib/store.js')
   const added = applyConnectionChange(config, {
     action: 'add',
     name: 'cache2',
@@ -273,6 +273,31 @@ async function main() {
   const merged = draftConnection({ name: 'db', kind: 'sqlite', file: 'C:/x.db', password: 'secret' }, { file: 'C:/y.db', password: '' })
   check('草稿合并保留已存密码', merged.password === 'secret' && merged.file === path.resolve('C:/y.db'))
   await expectReject('草稿必须是对象', async () => draftConnection(undefined, null), /对象/)
+
+  const exported = exportPayload({ connections: [{ name: 'db', kind: 'sqlite', file: dbFile, password: 'secret' }] })
+  check(
+    'export 含连接与时间戳',
+    exported.connections.length === 1 &&
+      typeof exported.exportedAt === 'string' &&
+      exported.connections[0].password === 'secret',
+  )
+  const imported = applyImport({ connections: [] }, exported, 'merge')
+  check('import merge 新增', imported.added.length === 1 && imported.config.connections[0].name === 'db')
+  const replaced = applyImport(
+    { connections: [{ name: 'x', kind: 'tcp', host: 'h', port: 1 }] },
+    { connections: [{ name: 'db', kind: 'sqlite', file: dbFile }] },
+    'replace',
+  )
+  check(
+    'import replace 先清空',
+    replaced.config.connections.length === 1 && replaced.config.connections[0].name === 'db',
+  )
+  const partial = applyImport(
+    { connections: [] },
+    { connections: [{ name: 'ok', kind: 'tcp', host: 'h', port: 1 }, { name: '', kind: 'tcp' }] },
+  )
+  check('import 单条失败不影响其它', partial.added.length === 1 && partial.errors.length === 1, partial.errors[0])
+  await expectReject('import 缺 connections 被拒', async () => applyImport({ connections: [] }, { nope: 1 }), /connections/)
 
   // ---------- 面板接口 ----------
   const { createApiHandler, API_PREFIX } = await load('lib/api.js')

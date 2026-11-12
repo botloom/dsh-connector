@@ -70,3 +70,13 @@ pnpm add "github:botloom/dsh-connector"
 3. 打开面板点「看在线节点」，能看到自己即成功
 
 表由插件自动创建（`dsh_peer_tasks`、`dsh_peers`）。
+
+## 换机器 / 备份
+
+面板左侧顶部有「导出 / 导入」：
+
+1. 旧机器点「导出」→ 得到 `connector-YYYY-MM-DD.json`（**含明文密码**）
+2. 新机器点「导入」→ 选这个文件，同名连接会被覆盖、新的会追加
+
+也可以用工具：`conn_export` / `conn_import`（`mode=replace` 是清空后导入）。
+文件请当密码本来保管。

@@ -1163,6 +1163,49 @@ window.__ModuleLoader__.load({
         for (const conn of connections) await testOne(conn)
       }, [connections, testOne])
 
+      const fileRef = useRef(null)
+
+      const exportConfig = useCallback(async () => {
+        try {
+          const response = await fetch('/wsconn/api/export')
+          const payload = await response.json()
+          if (!response.ok) throw new Error(payload?.error ?? `导出失败（${response.status}）`)
+          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+          const url = URL.createObjectURL(blob)
+          const anchor = document.createElement('a')
+          anchor.href = url
+          anchor.download = `connector-${new Date().toISOString().slice(0, 10)}.json`
+          document.body.appendChild(anchor)
+          anchor.click()
+          anchor.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 1000)
+          notify(`已导出 ${payload?.connections?.length ?? 0} 个连接（含密码，注意保管）`)
+        } catch (err) {
+          notify(`导出失败：${err?.message ?? err}`)
+        }
+      }, [notify])
+
+      const importFile = useCallback(
+        async (event) => {
+          const file = event.target?.files?.[0]
+          if (event.target) event.target.value = ''
+          if (file === undefined) return
+          try {
+            const payload = JSON.parse(await file.text())
+            const result = await post('/import', { ...payload, mode: 'merge' })
+            const failed = result?.errors?.length ?? 0
+            notify(
+              `导入完成：新增 ${result?.added?.length ?? 0}，更新 ${result?.updated?.length ?? 0}${failed > 0 ? `，失败 ${failed}` : ''}`,
+            )
+            if (failed > 0) console.warn('[ws-connections] 导入失败项', result.errors)
+            await load()
+          } catch (err) {
+            notify(`导入失败：${err?.message ?? err}`)
+          }
+        },
+        [load, notify],
+      )
+
       const removeConnection = useCallback(
         async (conn) => {
           if (!window.confirm(`${t('deleteConfirm')}\n\n${conn.name}\n${conn.endpoint ?? ''}`)) return
@@ -1233,7 +1276,34 @@ window.__ModuleLoader__.load({
           h(
             'div',
             { className: 'wsc-side-actions' },
+            h('input', {
+              type: 'file',
+              accept: 'application/json,.json',
+              style: { display: 'none' },
+              ref: fileRef,
+              onChange: importFile,
+            }),
             h(IconButton, { icon: 'wave', title: t('testAll'), size: 14, onClick: testAll }),
+            h(
+              'button',
+              {
+                type: 'button',
+                title: '把全部连接导出成 JSON（含密码）',
+                onClick: exportConfig,
+                style: { border: 0, background: 'transparent', color: T.dim, font: 'inherit', fontSize: 11, cursor: 'pointer', padding: '0 4px' },
+              },
+              '导出',
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                title: '从 JSON 文件导入连接',
+                onClick: () => fileRef.current?.click(),
+                style: { border: 0, background: 'transparent', color: T.dim, font: 'inherit', fontSize: 11, cursor: 'pointer', padding: '0 4px' },
+              },
+              '导入',
+            ),
             h(IconButton, { icon: 'plus', title: t('add'), size: 15, onClick: () => setEditing({ conn: null }) }),
           ),
         ),

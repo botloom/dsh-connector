@@ -52,12 +52,33 @@
 | `ssh_exec` | 通过 SSH 执行远程命令，破坏性命令默认拒绝 |
 | `http_call` | 对配置的接口发请求 |
 | `conn_edit` | 增删改连接，写入插件配置并重载 |
+| `conn_export` | 把全部连接导出成 JSON（含密码） |
+| `conn_import` | 从 JSON 导入连接（merge 同名覆盖 / replace 清空后导入） |
 | `peer_list` | 列出信箱里的 DSH 节点（在线状态、最后心跳） |
 | `peer_send` | 把一句话派给另一台 DSH 节点（可指定对方的会话 id） |
 | `peer_wait` | 等一个派活任务的结果（对方跑完的回复文本） |
 | `peer_sessions` | 列出本机可投递的会话（id / 是否空白 / 是否在跑） |
 | `peer_doctor` | 诊断信箱配置：连接解析、建表、心跳、错误原文 |
 
+### 配置导入 / 导出
+
+面板左侧顶部有「导出 / 导入」两个按钮，也可以让模型用工具做：
+
+- **导出**：`GET /wsconn/api/export` 或工具 `conn_export`，输出
+
+```json
+{
+  "version": 1,
+  "exportedAt": "2026-11-12T06:04:26.490Z",
+  "connections": [ { "name": "pg", "kind": "postgres", "host": "...", "password": "..." } ]
+}
+```
+
+- **导入**：`POST /wsconn/api/import`（body 就是导出文件的内容，可加 `"mode": "replace"`）或工具 `conn_import`。
+  默认 `merge`：同名覆盖、其余追加；`replace`：先清空再导入。
+  单条失败（缺 name、kind 不支持等）只记进 `errors`，不影响其它连接。
+
+> ⚠️ 导出的 JSON **包含明文密码**，只适合放进密码管理器或加密封包里传，别丢在共享目录。
 ### DSH 节点（跨机器协作）
 
 `dsh` 是一种连接类型（分类 `agent`，面板里单独一组），它不连数据库，只记录：

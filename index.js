@@ -22,7 +22,7 @@ import { formatDuration, oneLine } from './lib/format.js'
 import { probeConnection } from './lib/connectors/index.js'
 import { driverManifests, getDriver, listDrivers, loadExternalDrivers } from './lib/drivers/index.js'
 import { API_PREFIX, createApiHandler } from './lib/api.js'
-import { editConnection } from './lib/store.js'
+import { applyImport, editConfig, editConnection, exportPayload } from './lib/store.js'
 import {
   claimTask,
   ensureSchema,
@@ -449,6 +449,46 @@ export async function apply(ctx, config = {}) {
     })
   }
 
+  ctx.tools.register({
+    name: 'conn_export',
+    description:
+      '把连接器里的全部连接导出成 JSON（含密码，注意保管）。返回的文本可直接保存成 .json 文件，用于备份或导入到别的机器。',
+    parameters: {},
+    output: TEXT_OUTPUT,
+    async execute() {
+      return { text: JSON.stringify(exportPayload(state), null, 2) }
+    },
+    presentCall: () => present('导出连接配置', 'read'),
+  })
+
+  ctx.tools.register({
+    name: 'conn_import',
+    description:
+      '从 JSON 导入连接：mode=merge（默认）同名覆盖、其余追加；mode=replace 先清空再导入。json 传导出得到的文件内容。',
+    parameters: {
+      json: { type: 'string', required: true, description: '导出的 JSON 文本（可直接粘贴文件内容）' },
+      mode: { type: 'string', enum: ['merge', 'replace'], description: '默认 merge' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const raw = typeof args?.json === 'string' ? args.json : ''
+      if (raw.trim() === '') throw new Error('json 不能为空')
+      let payload
+      try {
+        payload = JSON.parse(raw)
+      } catch {
+        throw new Error('json 不是合法的 JSON')
+      }
+      const mode = args?.mode === 'replace' ? 'replace' : 'merge'
+      const result = await editConfig(ctx, (current) => applyImport(current, payload, mode))
+      const lines = [`导入完成：新增 ${result.added.length} 条，更新 ${result.updated.length} 条`]
+      if (result.added.length > 0) lines.push(`新增：${result.added.join(', ')}`)
+      if (result.updated.length > 0) lines.push(`更新：${result.updated.join(', ')}`)
+      if (result.errors.length > 0) lines.push(`失败 ${result.errors.length} 条：\n${result.errors.join('\n')}`)
+      return { text: lines.join('\n') }
+    },
+    presentCall: () => present('导入连接配置', 'edit'),
+  })
   // ---------------- 跨 DSH 信箱（可选，配置了 config.peer 才启用） ----------------
   const dshConnection = state.connections.find((item) => item.kind === 'dsh')
   const peer =
