@@ -50,7 +50,7 @@ window.__ModuleLoader__.load({
       sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z',
       download: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M4 19h16',
       upload: 'M12 20V9M7.5 13.5 12 9l4.5 4.5M4 5h16',
-      more: 'M6 12h.01M12 12h.01M18 12h.01',
+      more: 'M5 12a1.4 1.4 0 1 0 2.8 0a1.4 1.4 0 1 0-2.8 0M10.6 12a1.4 1.4 0 1 0 2.8 0a1.4 1.4 0 1 0-2.8 0M16.2 12a1.4 1.4 0 1 0 2.8 0a1.4 1.4 0 1 0-2.8 0',
     }
 
     function Glyph({ name, size = 16, color = 'currentColor', stroke = 1.6 }) {
@@ -1129,7 +1129,6 @@ window.__ModuleLoader__.load({
       const [status, setStatus] = useState({})
       const [toast, setToast] = useState(null)
       const [menu, setMenu] = useState(null)
-      const [ioMenu, setIoMenu] = useState(null)
       const searchRef = useRef(null)
 
       const notify = useCallback((message) => {
@@ -1312,15 +1311,8 @@ window.__ModuleLoader__.load({
               onChange: importFile,
             }),
             h(IconButton, { icon: 'wave', title: t('testAll'), size: 14, onClick: testAll }),
-            h(IconButton, {
-              icon: 'more',
-              title: '导入 / 导出配置',
-              size: 15,
-              onClick: (event) => {
-                const rect = event.currentTarget.getBoundingClientRect()
-                setIoMenu({ x: rect.left - 140, y: rect.bottom + 4 })
-              },
-            }),
+            h(IconButton, { icon: 'download', title: '导出配置（JSON，含密码）', size: 15, onClick: exportConfig }),
+            h(IconButton, { icon: 'upload', title: '导入配置（JSON 文件）', size: 15, onClick: () => fileRef.current?.click() }),
             h(IconButton, { icon: 'plus', title: t('add'), size: 15, onClick: () => setEditing({ conn: null }) }),
           ),
         ),
@@ -1370,7 +1362,6 @@ window.__ModuleLoader__.load({
                           h('span', { className: 'wsc-row-name' }, conn.name),
                           h('span', { className: 'wsc-row-meta' }, itemManifest?.label ?? conn.kind),
                         ),
-                        h('span', { className: 'wsc-dot', 'data-state': status[conn.name]?.state ?? 'idle' }),
                       ),
                       h(Switch, {
                         on: conn.disabled !== true,
@@ -1498,17 +1489,6 @@ window.__ModuleLoader__.load({
           ),
         ),
         menu !== null ? h(ContextMenu, { x: menu.x, y: menu.y, items: menuItems, onClose: () => setMenu(null) }) : null,
-        ioMenu !== null
-          ? h(ContextMenu, {
-              x: ioMenu.x,
-              y: ioMenu.y,
-              items: [
-                { id: 'export', icon: 'download', label: '导出配置（含密码）', onSelect: exportConfig },
-                { id: 'import', icon: 'upload', label: '导入配置…', onSelect: () => fileRef.current?.click() },
-              ],
-              onClose: () => setIoMenu(null),
-            })
-          : null,
         toast ? h('div', { className: 'wsc-toast' }, h(Glyph, { name: 'check', size: 14 }), toast) : null,
       )
     }
