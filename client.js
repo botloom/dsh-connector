@@ -846,6 +846,11 @@ window.__ModuleLoader__.load({
               ? `${t('secretEnv')} ${conn.tokenEnv}`
               : t('secretNone')
       rows.push([t('secret'), secret])
+      if (conn.notes !== undefined)
+        rows.push([
+          '说明',
+          h('span', { style: { whiteSpace: 'pre-wrap', lineHeight: 1.6 } }, conn.notes),
+        ])
 
       return h(
         'div',
@@ -941,7 +946,7 @@ window.__ModuleLoader__.load({
       const isNew = !conn
       const [kind, setKind] = useState(conn?.kind ?? kinds[0]?.kind ?? 'postgres')
       const manifest = manifestFor(kinds, kind)
-      const [form, setForm] = useState(() => buildForm(conn, manifest))
+      const [form, setForm] = useState(() => ({ ...buildForm(conn, manifest), notes: conn?.notes ?? '' }))
       const [busy, setBusy] = useState(false)
       const [testing, setTesting] = useState(false)
       const [error, setError] = useState(null)
@@ -956,6 +961,8 @@ window.__ModuleLoader__.load({
 
       const payload = () => {
         const body = { name: `${form.name ?? ''}`.trim(), kind }
+    const notes = `${form.notes ?? ''}`.trim()
+    if (notes !== '') body.notes = notes
         for (const field of manifest?.fields ?? []) {
           const raw = form[field.name]
           if (field.type === 'boolean') {
@@ -1101,6 +1108,28 @@ window.__ModuleLoader__.load({
                 value: form.name ?? '',
                 placeholder: t('namePlaceholder'),
                 onChange: (event) => setValue('name', event.target.value),
+              }),
+            ),
+          ),
+        ),
+
+        h(
+          'div',
+          { className: 'wsc-section' },
+          h('div', { className: 'wsc-section-title' }, '附加信息（智能体可见）'),
+          h(
+            'div',
+            { className: 'wsc-fieldset' },
+            h(
+              Field,
+              { label: '说明', hint: '比如常用目录、会话 id 是干什么的、注意事项' },
+              h('textarea', {
+                className: 'wsc-input',
+                rows: 3,
+                value: form.notes ?? '',
+                placeholder: '例如：\n常用目录 /data/app/logs\n会话 session-xxx 用于前端联调',
+                onChange: (event) => setValue('notes', event.target.value),
+                style: { resize: 'vertical', padding: '7px 9px', lineHeight: 1.5, fontFamily: 'inherit' },
               }),
             ),
           ),

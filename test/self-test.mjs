@@ -148,6 +148,10 @@ async function main() {
   check('同名连接保留第一个', dup.connections.length === 1 && dup.connections[0].port === 1 && dup.warnings.length === 1)
 
   check('按名字取连接（大小写不敏感）', resolveConnection(state.connections, 'CACHE').name === 'cache')
+  const withNotes = normalizeConnection({ name: 'n', kind: 'tcp', host: 'h', port: 1, notes: '  常用目录 /data  ' }, '测试')
+  check('notes 会去首尾空格并保留', withNotes.notes === '常用目录 /data', JSON.stringify(withNotes.notes))
+  const emptyNotes = normalizeConnection({ name: 'n', kind: 'tcp', host: 'h', port: 1, notes: '   ' }, '测试')
+  check('notes 为空时不写字段', emptyNotes.notes === undefined)
   await expectReject('未知连接报可用列表', async () => resolveConnection(state.connections, 'nope'), /可用连接/)
   await expectReject('多连接必须指定', async () => resolveConnection(state.connections), /请用 connection 指定/)
   check('只有一个连接时可省略', resolveConnection([state.connections[0]]).name === 'sqlite-demo')

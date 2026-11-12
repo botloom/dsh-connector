@@ -196,9 +196,10 @@ export async function apply(ctx, config = {}) {
       if (state.connections.length === 0) {
         return { text: '还没有配置任何连接。用 conn_edit（action=add）添加，或在「连接器」面板里新建。' }
       }
-      const lines = state.connections.map(
-        (conn) => `- ${conn.name}${conn.disabled === true ? '（已禁用）' : ''} · ${describeConnection(conn)}`,
-      )
+      const lines = state.connections.flatMap((conn) => {
+        const head = `- ${conn.name}${conn.disabled === true ? '（已禁用）' : ''} · ${describeConnection(conn)}`
+        return conn.notes === undefined ? [head] : [head, ...conn.notes.split(/\r?\n/).map((line) => `    说明：${line}`)]
+      })
       return { text: [`已配置 ${state.connections.length} 个连接：`, ...lines].join('\n') }
     },
     presentCall: () => present('查看连接', 'read'),
@@ -446,10 +447,11 @@ export async function apply(ctx, config = {}) {
       name: 'workspace-connections',
       order: 45,
       text: () => {
-        const lines = state.connections.map(
-          (conn) =>
-            `- ${conn.name}${conn.disabled === true ? '（已禁用，调用会被拒绝）' : ''}：${describeConnection(conn)}`,
-        )
+        const lines = state.connections.flatMap((conn) => {
+          const head = `- ${conn.name}${conn.disabled === true ? '（已禁用，调用会被拒绝）' : ''}：${describeConnection(conn)}`
+          if (conn.notes === undefined) return [head]
+          return [head, ...conn.notes.split(/\r?\n/).map((line) => `  ${line}`)]
+        })
         return [
           '## 连接器（已配置连接）',
           '这些连接可用 conn_call 调用（先 conn_catalog 查驱动能力）；db_query / redis_exec / ssh_exec / http_call 是等价的快捷入口：',
