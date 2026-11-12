@@ -28,7 +28,7 @@ window.__ModuleLoader__.load({
     const PATHS = {
       plug: 'M9 2v6M15 2v6M6 8h12v3a6 6 0 0 1-12 0V8ZM12 17v5',
       close: 'M6 6l12 12M18 6L6 18',
-      plus: 'M12 5v14M5 12h14',
+      plus: 'M12 4.2v15.6M4.2 12h15.6',
       search: 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16ZM21 21l-4.3-4.3',
       database: 'M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3ZM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6',
       bolt: 'M13 2 4 14h6l-1 8 9-12h-6l1-8Z',
@@ -1310,7 +1310,7 @@ window.__ModuleLoader__.load({
               ref: fileRef,
               onChange: importFile,
             }),
-            h(IconButton, { icon: 'wave', title: t('testAll'), size: 14, onClick: testAll }),
+            h(IconButton, { icon: 'wave', title: t('testAll'), size: 15, onClick: testAll }),
             h(IconButton, { icon: 'download', title: '导出配置（JSON，含密码）', size: 15, onClick: exportConfig }),
             h(IconButton, { icon: 'upload', title: '导入配置（JSON 文件）', size: 15, onClick: () => fileRef.current?.click() }),
             h(IconButton, { icon: 'plus', title: t('add'), size: 15, onClick: () => setEditing({ conn: null }) }),
