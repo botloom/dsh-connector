@@ -171,6 +171,10 @@ DB 连接留空 `database` 就是「服务器级连接」：能连、能列库�
 
 默认全部只读，破坏性操作要两道门：
 
+> **SQL 第二道门（新增）**：连接开了 `allowWrite` 之后，`DROP` / `TRUNCATE` / `ALTER` 仍然默认拒绝，要再给连接加 `allowDdl: true`；
+> `UPDATE` / `DELETE` 不带 `WHERE` 直接拒绝。所以「连上可写库」≠「能一键删库」。
+
+
 - **SQL**：非 `SELECT/SHOW/EXPLAIN/WITH(纯读)/PRAGMA(读)` 的语句默认拒绝；
   需要写时，连接要 `allowWrite: true`，且调用时传 `write: true`。
   `EXPLAIN ANALYZE UPDATE ...` 这种「看着像 explain 其实会写」的语句按写处理。

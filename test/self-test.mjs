@@ -153,12 +153,20 @@ async function main() {
   check('只有一个连接时可省略', resolveConnection([state.connections[0]]).name === 'sqlite-demo')
 
   // ---------- SQL 守卫 ----------
-  const { classifySql, splitStatements } = await load('lib/sqlguard.js')
+  const { assertSafeWrite, classifySql, splitStatements } = await load('lib/sqlguard.js')
   check('select 只读', classifySql('select 1').readOnly === true)
   check('分号在字符串里不切', splitStatements("select ';'").length === 1)
   check('WITH 写 CTE 非只读', classifySql('with x as (delete from t returning *) select * from x').readOnly === false)
   check('EXPLAIN ANALYZE UPDATE 非只读', classifySql('explain analyze update t set a=1').readOnly === false)
   check('PRAGMA 读只读', classifySql('pragma table_info(users)').readOnly === true)
+  await expectReject('DROP 默认被拒', async () => assertSafeWrite('drop table t', {}), /结构变更/)
+  await expectReject('TRUNCATE 默认被拒', async () => assertSafeWrite('truncate table t', {}), /结构变更/)
+  await expectReject('DELETE 无 WHERE 被拒', async () => assertSafeWrite('delete from t', {}), /WHERE/)
+  await expectReject('UPDATE 无 WHERE 被拒', async () => assertSafeWrite('update t set a = 1', {}), /WHERE/)
+  assertSafeWrite('drop table t', { allowDdl: true })
+  assertSafeWrite('delete from t where id = 1', {})
+  assertSafeWrite('update t set a = 1 where id = 2', {})
+  check('写语句第二道门按预期放行/拦截', true)
 
   // ---------- SQLite ----------
   const { querySql, probeSql, listDatabases } = await load('lib/connectors/sql.js')

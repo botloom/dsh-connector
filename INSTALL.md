@@ -80,3 +80,13 @@ pnpm add "github:botloom/dsh-connector"
 
 也可以用工具：`conn_export` / `conn_import`（`mode=replace` 是清空后导入）。
 文件请当密码本来保管。
+## 安全须知
+
+- 所有连接默认**只读**；写语句要连接 `allowWrite: true` **且**调用时 `write: true`
+- 即使可写，`DROP` / `TRUNCATE` / `ALTER` 仍被拒绝，需要连接再开 `allowDdl: true`
+- `UPDATE` / `DELETE` 不带 `WHERE` 一律拒绝
+- SSH 破坏性命令（`rm -rf /`、`mkfs`、`shutdown`…）默认拒绝，需要 `allowDestructive: true`
+- Redis 危险命令（`FLUSHALL`、`CONFIG SET`、`EVAL`…）默认拒绝，需要 `allowDangerous: true`
+- HTTP 只允许同源，跨域要 `allowAnyUrl: true`
+
+信箱（DSH 节点）需要一个可写连接来建表/写任务。建议**单独建一个只连 `dsh_peer` 库的账号**给信箱用，不要直接复用生产库的 root/可写连接。
