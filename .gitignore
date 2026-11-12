@@ -1,0 +1,5 @@
+node_modules/
+.design/
+*.zip
+test-results/
+*.log

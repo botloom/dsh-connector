@@ -1,0 +1,7 @@
+- insert:
+    - id: ws-connections
+      name: '@local/ws-connections'
+      config:
+        timeoutMs: 15000
+        maxRows: 50
+        workspaces: []

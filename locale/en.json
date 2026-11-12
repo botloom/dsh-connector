@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Connector",
+    "description": "Binds databases, Redis, SSH servers and HTTP APIs to each workspace: a management panel plus tools the agent uses to query them."
+  }
+}
