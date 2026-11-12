@@ -50,10 +50,20 @@ const server = createServer(async (req, res) => {
     return send(401, { error: 'unauthorized' })
   }
   if (url.pathname === '/crumbIssuer/api/json') {
+    // 真实 Jenkins：crumb 绑定在会话上，没带 cookie 不给
+    if (!`${req.headers.cookie ?? ''}`.includes('JSESSIONID=s1')) {
+      return send(403, 'no session', 'text/plain')
+    }
     return send(200, { crumbRequestField: 'Jenkins-Crumb', crumb: 'abc123' })
   }
   if (req.method === 'POST' && url.pathname.startsWith('/job/')) {
-    if (expectCrumb && req.headers['jenkins-crumb'] !== 'abc123') {
+    if (!expectCrumb) {
+      triggered += 1
+      return send(201, '')
+    }
+    const cookieOk = `${req.headers.cookie ?? ''}`.includes('JSESSIONID=s1')
+    if (req.headers['jenkins-crumb'] !== 'abc123' || !cookieOk) {
+      res.setHeader('set-cookie', 'JSESSIONID=s1; Path=/')
       return send(403, 'No valid crumb was included in the request', 'text/plain')
     }
     crumbChecks += 1
@@ -107,7 +117,11 @@ try {
   triggered = 0
   expectCrumb = true
   const withCrumb = await driver.call(writable, 'build', { job: 'deploy-140', params: { env: 'test' } }, {})
-  check('403 时自动取 crumb 重试', triggered === 1 && crumbChecks >= 1 && /已触发/.test(withCrumb.text), withCrumb.text)
+  check(
+    '403 时自动取会话 cookie + crumb 重试',
+    triggered === 1 && crumbChecks >= 1 && /已触发/.test(withCrumb.text),
+    withCrumb.text,
+  )
   expectCrumb = false
 
   let authError = ''
