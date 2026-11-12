@@ -264,6 +264,16 @@ async function main() {
     { connections: [{ name: 'db', kind: 'sqlite', file: dbFile }] },
     { action: 'toggle', name: 'db', disabled: true },
   )
+  const clearedNotes = applyConnectionChange(
+    { connections: [{ name: 'n', kind: 'tcp', host: 'h', port: 1, notes: '旧的说明' }] },
+    { action: 'update', name: 'n', connection: { notes: '' } },
+  )
+  check('update 能清空 notes', clearedNotes.config.connections[0].notes === undefined)
+  const keptNotes = applyConnectionChange(
+    { connections: [{ name: 'n', kind: 'tcp', host: 'h', port: 1, notes: '旧的说明' }] },
+    { action: 'update', name: 'n', connection: { timeoutMs: 5000 } },
+  )
+  check('update 不带 notes 时保留', keptNotes.config.connections[0].notes === '旧的说明')
   check('store toggle 禁用', toggled.config.connections[0].disabled === true && /已禁用/.test(toggled.message))
   const toggledBack = applyConnectionChange(toggled.config, { action: 'toggle', name: 'db', disabled: false })
   check('store toggle 重新启用', toggledBack.config.connections[0].disabled === false)

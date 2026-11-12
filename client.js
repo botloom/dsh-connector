@@ -966,8 +966,7 @@ window.__ModuleLoader__.load({
 
       const payload = () => {
         const body = { name: `${form.name ?? ''}`.trim(), kind }
-    const notes = `${form.notes ?? ''}`.trim()
-    if (notes !== '') body.notes = notes
+    body.notes = `${form.notes ?? ''}`.trim()
         for (const field of manifest?.fields ?? []) {
           const raw = form[field.name]
           if (field.type === 'boolean') {
