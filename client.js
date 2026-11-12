@@ -273,16 +273,18 @@ window.__ModuleLoader__.load({
         box-shadow:0 24px 70px rgba(0,0,0,.28),0 2px 8px rgba(0,0,0,.10);overflow:hidden;
         animation:wsc-rise .30s var(--wsc-ease);}
       @keyframes wsc-fade{from{opacity:0}to{opacity:1}}
-  .wsc-peer-toasts{position:fixed;right:18px;bottom:18px;z-index:1150;display:flex;flex-direction:column;
-  gap:8px;pointer-events:auto;max-width:340px;}
-  .wsc-peer-toast{display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border-radius:12px;
-  background:${T.bg};border:1px solid var(--wsc-hair);box-shadow:0 12px 32px rgba(0,0,0,.22);
-  font-size:12px;line-height:1.5;animation:wsc-peer-in .22s var(--wsc-ease);cursor:pointer;}
-  .wsc-peer-toast[data-kind="received"]{border-left:3px solid ${T.accent};}
-  .wsc-peer-toast[data-kind="done"]{border-left:3px solid ${T.ok};}
-  .wsc-peer-toast[data-kind="failed"]{border-left:3px solid ${T.bad};}
-  .wsc-peer-toast-head{font-weight:600;font-size:12px;}
-  .wsc-peer-toast-body{color:${T.dim};word-break:break-all;}
+  .wsc-peer-card{position:fixed;right:20px;bottom:20px;width:320px;z-index:2147483000;
+  pointer-events:auto;border:1px solid var(--wsc-hair);border-radius:12px;background:${T.layer1};
+  color:${T.text};box-shadow:0 10px 30px rgba(0,0,0,.28);padding:12px 14px;
+  font-size:12.5px;line-height:1.6;animation:wsc-peer-in .2s var(--wsc-ease);}
+  .wsc-peer-head{display:flex;align-items:baseline;gap:8px;}
+  .wsc-peer-title{font-weight:600;}
+  .wsc-peer-time{margin-left:auto;color:${T.dim};font-size:11px;}
+  .wsc-peer-close{border:0;background:transparent;color:${T.dim};cursor:pointer;
+  font-size:15px;line-height:1;padding:0 2px;}
+  .wsc-peer-close:hover{color:${T.text};}
+  .wsc-peer-line{margin-top:6px;word-break:break-all;}
+  .wsc-peer-tag{font-weight:600;}
   @keyframes wsc-peer-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
       @keyframes wsc-rise{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
@@ -1690,20 +1692,25 @@ window.__ModuleLoader__.load({
 
     function PeerToasts() {
       const [items, setItems] = useState([])
+      const [hidden, setHidden] = useState(false)
+      const [stamp, setStamp] = useState('')
+
       useEffect(() => {
         let alive = true
         let cursor = 0
+        let hideTimer = null
         const tick = async () => {
           try {
             const data = await request(`/peer/events?since=${cursor}`)
             if (!alive || !Array.isArray(data?.events) || data.events.length === 0) return
             cursor = typeof data.cursor === 'number' ? data.cursor : cursor
             setItems((prev) => [...prev, ...data.events].slice(-4))
-            for (const event of data.events) {
-              setTimeout(() => {
-                setItems((prev) => prev.filter((entry) => entry.id !== event.id))
-              }, 10000)
-            }
+            setHidden(false)
+            setStamp(new Date().toTimeString().slice(0, 5))
+            if (hideTimer) clearTimeout(hideTimer)
+            hideTimer = setTimeout(() => {
+              if (alive) setHidden(true)
+            }, 45000)
           } catch {
             /* 插件没起来时静默 */
           }
@@ -1713,38 +1720,35 @@ window.__ModuleLoader__.load({
         return () => {
           alive = false
           clearInterval(timer)
+          if (hideTimer) clearTimeout(hideTimer)
         }
       }, [])
 
-      if (items.length === 0) return null
+      if (items.length === 0 || hidden) return null
 
-      const titleOf = (kind) =>
-        kind === 'received' ? '收到跨机任务' : kind === 'done' ? '任务已执行完' : '任务执行失败'
+      const labelOf = (kind) => (kind === 'received' ? '收到' : kind === 'done' ? '完成' : '失败')
+      const colorOf = (kind) => (kind === 'done' ? T.ok : kind === 'failed' ? T.bad : T.accent)
 
       return h(
         'div',
-        { className: 'wsc-peer-toasts' },
+        { className: 'wsc-peer-card' },
+        h(
+          'div',
+          { className: 'wsc-peer-head' },
+          h('span', { className: 'wsc-peer-title' }, '连接器 · 跨机任务'),
+          h('span', { className: 'wsc-peer-time' }, stamp),
+          h(
+            'button',
+            { type: 'button', className: 'wsc-peer-close', title: '关闭', onClick: () => setHidden(true) },
+            '×',
+          ),
+        ),
         items.map((item) =>
           h(
             'div',
-            {
-              key: item.id,
-              className: 'wsc-peer-toast',
-              'data-kind': item.kind,
-              title: '点击关闭',
-              onClick: () => setItems((prev) => prev.filter((entry) => entry.id !== item.id)),
-            },
-            h(Glyph, {
-              name: item.kind === 'failed' ? 'alert' : item.kind === 'done' ? 'check' : 'chat',
-              size: 14,
-              color: item.kind === 'failed' ? T.bad : item.kind === 'done' ? T.ok : T.accent,
-            }),
-            h(
-              'div',
-              { style: { minWidth: 0 } },
-              h('div', { className: 'wsc-peer-toast-head' }, `${titleOf(item.kind)} · ${item.from}`),
-              h('div', { className: 'wsc-peer-toast-body' }, item.text || item.sessionId || ''),
-            ),
+            { key: item.id, className: 'wsc-peer-line' },
+            h('span', { className: 'wsc-peer-tag', style: { color: colorOf(item.kind) } }, `[${labelOf(item.kind)}]`),
+            ` ${item.from} · ${item.text || item.sessionId || ''}`,
           ),
         ),
       )
