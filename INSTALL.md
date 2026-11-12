@@ -34,6 +34,25 @@ pnpm add "github:botloom/dsh-connector"
 plugin_manager(install_bundle, target: "github:botloom/dsh-connector")
 ```
 
+## 常见错误
+
+### `ERR_PNPM_EPERM ... rename 'ws-connections_tmp_...' -> 'ws-connections'`
+
+说明这个 profile 里**已经有一个** `node_modules\@local\ws-connections`，而且当前正被运行中的 DSH 占用
+（这台机器是开发模式，用 `link:` 指向源码目录）。pnpm 想用 git 包替换它，Windows 不允许。
+
+做法二选一：
+
+- **本机已经是 link 状态**：不需要从 GitHub 再装一次，直接用（`install.cmd` 也不会重复装）
+- **确实要换成 git 版本**：完全退出 DSH → 删联接 → 再装
+
+```powershell
+cmd /c rmdir "$env:USERPROFILE\.dsh\profiles\desktop\node_modules\@local\ws-connections"
+cd $env:USERPROFILE\.dsh\profiles\desktop
+pnpm add "github:botloom/dsh-connector"
+```
+
+要换回开发链接：删掉该目录后跑一次 `install.cmd`。
 注意：
 - 仓库里**不要提交** `node_modules`（`.gitignore` 已排除，依赖由 pnpm 安装）
 - `private: true` 不影响 git 安装

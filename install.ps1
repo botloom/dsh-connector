@@ -92,7 +92,15 @@ $scopeDir = Join-Path $profileDir 'node_modules\@local'
 $junction = Join-Path $scopeDir 'ws-connections'
 if (-not $DryRun) {
   New-Item -ItemType Directory -Force -Path $scopeDir | Out-Null
-  if (Test-Path $junction) { Remove-Item $junction -Recurse -Force }
+  if (Test-Path $junction) {
+    $existing = Get-Item $junction -Force
+    if ($existing.LinkType -eq 'Junction') {
+      # 只删联接，不碰目标目录；Remove-Item -Recurse 在联接上会递归删到源码目录
+      & cmd /c rmdir "$junction" | Out-Null
+    } else {
+      Remove-Item $junction -Recurse -Force
+    }
+  }
   New-Item -ItemType Junction -Path $junction -Target $InstallDir | Out-Null
 }
 Say "[3/3] 建联接 → $junction"
