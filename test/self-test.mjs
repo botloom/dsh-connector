@@ -151,6 +151,21 @@ async function main() {
   await expectReject('未知连接报可用列表', async () => resolveConnection(state.connections, 'nope'), /可用连接/)
   await expectReject('多连接必须指定', async () => resolveConnection(state.connections), /请用 connection 指定/)
   check('只有一个连接时可省略', resolveConnection([state.connections[0]]).name === 'sqlite-demo')
+  await expectReject(
+    '禁用的连接不能调用',
+    async () => resolveConnection([{ name: 'off', kind: 'tcp', host: 'h', port: 1, disabled: true }], 'off'),
+    /已禁用/,
+  )
+  check(
+    '面板可以取到禁用连接',
+    resolveConnection([{ name: 'off', kind: 'tcp', host: 'h', port: 1, disabled: true }], 'off', { allowDisabled: true })
+      .disabled === true,
+  )
+  await expectReject(
+    '全部禁用时提示先启用',
+    async () => resolveConnection([{ name: 'off', kind: 'tcp', host: 'h', port: 1, disabled: true }]),
+    /都被禁用/,
+  )
 
   // ---------- SQL 守卫 ----------
   const { assertSafeWrite, classifySql, splitStatements } = await load('lib/sqlguard.js')
@@ -241,6 +256,13 @@ async function main() {
     { action: 'update', name: 'db', connection: { kind: 'sqlite', file: dbFile, password: '' } },
   )
   check('store update 保留未填的密码', updated.config.connections[0].password === 'secret')
+  const toggled = applyConnectionChange(
+    { connections: [{ name: 'db', kind: 'sqlite', file: dbFile }] },
+    { action: 'toggle', name: 'db', disabled: true },
+  )
+  check('store toggle 禁用', toggled.config.connections[0].disabled === true && /已禁用/.test(toggled.message))
+  const toggledBack = applyConnectionChange(toggled.config, { action: 'toggle', name: 'db', disabled: false })
+  check('store toggle 重新启用', toggledBack.config.connections[0].disabled === false)
   const renamed = applyConnectionChange(
     { connections: [{ name: 'db', kind: 'sqlite', file: dbFile }] },
     { action: 'update', name: 'db', connection: { name: 'db2', kind: 'sqlite', file: dbFile } },

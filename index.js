@@ -196,7 +196,9 @@ export async function apply(ctx, config = {}) {
       if (state.connections.length === 0) {
         return { text: '还没有配置任何连接。用 conn_edit（action=add）添加，或在「连接器」面板里新建。' }
       }
-      const lines = state.connections.map((conn) => `- ${conn.name} · ${describeConnection(conn)}`)
+      const lines = state.connections.map(
+        (conn) => `- ${conn.name}${conn.disabled === true ? '（已禁用）' : ''} · ${describeConnection(conn)}`,
+      )
       return { text: [`已配置 ${state.connections.length} 个连接：`, ...lines].join('\n') }
     },
     presentCall: () => present('查看连接', 'read'),
@@ -399,13 +401,17 @@ export async function apply(ctx, config = {}) {
       action: {
         type: 'string',
         required: true,
-        enum: ['add', 'update', 'delete'],
-        description: 'add 新增、update 覆盖、delete 删除。',
+        enum: ['add', 'update', 'delete', 'toggle'],
+        description: 'add 新增、update 覆盖、delete 删除、toggle 启用/禁用（配合 disabled）。',
       },
       name: {
         type: 'string',
         required: true,
         description: '连接名，唯一，后续工具用它指定连接。',
+      },
+      disabled: {
+        type: 'boolean',
+        description: 'action=toggle 时用：true 禁用、false 启用。',
       },
       connection: {
         type: 'object',
@@ -415,7 +421,7 @@ export async function apply(ctx, config = {}) {
     output: TEXT_OUTPUT,
     async execute(args) {
       const action = args?.action
-      if (action !== 'add' && action !== 'update' && action !== 'delete') {
+      if (action !== 'add' && action !== 'update' && action !== 'delete' && action !== 'toggle') {
         throw new Error('action 只能是 add / update / delete')
       }
       const name = typeof args?.name === 'string' ? args.name.trim() : ''
@@ -425,6 +431,7 @@ export async function apply(ctx, config = {}) {
         action,
         name,
         connection: args?.connection,
+        disabled: action === 'toggle' ? args?.disabled === true : undefined,
       })
 
       return { text: `${message}。插件按新配置重载后，conn_list 就能看到。` }
@@ -439,7 +446,10 @@ export async function apply(ctx, config = {}) {
       name: 'workspace-connections',
       order: 45,
       text: () => {
-        const lines = state.connections.map((conn) => `- ${conn.name}：${describeConnection(conn)}`)
+        const lines = state.connections.map(
+          (conn) =>
+            `- ${conn.name}${conn.disabled === true ? '（已禁用，调用会被拒绝）' : ''}：${describeConnection(conn)}`,
+        )
         return [
           '## 连接器（已配置连接）',
           '这些连接可用 conn_call 调用（先 conn_catalog 查驱动能力）；db_query / redis_exec / ssh_exec / http_call 是等价的快捷入口：',
@@ -490,7 +500,7 @@ export async function apply(ctx, config = {}) {
     presentCall: () => present('导入连接配置', 'edit'),
   })
   // ---------------- 跨 DSH 信箱（可选，配置了 config.peer 才启用） ----------------
-  const dshConnection = state.connections.find((item) => item.kind === 'dsh')
+  const dshConnection = state.connections.find((item) => item.kind === 'dsh' && item.disabled !== true)
   const peer =
     peerConfig(config) ??
     (dshConnection === undefined ||

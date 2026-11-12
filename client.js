@@ -728,7 +728,7 @@ window.__ModuleLoader__.load({
     /* 连接详情（纯管理，不执行）                                            */
     /* ------------------------------------------------------------------ */
 
-    function Detail({ conn, manifest, status, onToast, onTest, onEdit, onRemove }) {
+    function Detail({ conn, manifest, status, onToast, onTest, onEdit, onRemove, onToggle }) {
       const cat = categoryOf(manifest)
       const [testing, setTesting] = useState(false)
       const state = status?.[conn.name]
@@ -810,12 +810,20 @@ window.__ModuleLoader__.load({
                     state.state === 'busy' ? t('testing') : state.state === 'ok' ? t('tested') : t('failed'),
                   )
                 : null,
+              conn.disabled === true
+                ? h('span', { className: 'wsc-chip', 'data-tone': 'bad' }, '已禁用')
+                : null,
             ),
           ),
           h(
             'div',
             { className: 'wsc-detail-actions' },
             h(Button, { icon: 'wave', busy: testing, onClick: runTest, children: testing ? t('testing') : t('test') }),
+            h(Button, {
+              icon: conn.disabled === true ? 'check' : 'bolt',
+              onClick: () => onToggle(conn),
+              children: conn.disabled === true ? '启用' : '禁用',
+            }),
             h(Button, { icon: 'edit', onClick: () => onEdit(conn), children: t('edit') }),
             h(Button, { variant: 'danger', icon: 'trash', onClick: () => onRemove(conn), children: t('remove') }),
           ),
@@ -1208,6 +1216,20 @@ window.__ModuleLoader__.load({
         [load, notify],
       )
 
+      const toggleConnection = useCallback(
+        async (conn) => {
+          const disabled = conn.disabled !== true
+          try {
+            await post('/connection', { action: 'toggle', name: conn.name, disabled })
+            notify(`${disabled ? '已禁用' : '已启用'} · ${conn.name}`)
+            await load()
+          } catch (err) {
+            notify(`${err?.message ?? err}`)
+          }
+        },
+        [load, notify],
+      )
+
       const removeConnection = useCallback(
         async (conn) => {
           if (!window.confirm(`${t('deleteConfirm')}\n\n${conn.name}\n${conn.endpoint ?? ''}`)) return
@@ -1311,6 +1333,8 @@ window.__ModuleLoader__.load({
                         type: 'button',
                         className: 'wsc-row',
                         'data-active': conn.name === selected ? 'true' : 'false',
+                        'data-disabled': conn.disabled === true ? 'true' : 'false',
+                        style: conn.disabled === true ? { opacity: 0.5 } : undefined,
                         onClick: () => {
                           setSelected(conn.name)
                           setEditing(null)
@@ -1365,6 +1389,7 @@ window.__ModuleLoader__.load({
           onTest: testOne,
           onEdit: (conn) => setEditing({ conn }),
           onRemove: removeConnection,
+          onToggle: toggleConnection,
         })
       } else {
         main = h(EmptyState, {
