@@ -528,6 +528,24 @@ export async function apply(ctx, config = {}) {
   }
   const peerReady = peer !== undefined && peerConnection !== undefined
 
+  // 给面板用的轻量事件流：右下角弹窗就靠它
+  state.peerEvents = []
+  // 用时间戳做起点：插件重载后序号仍单调递增，面板的 since 游标不会错位
+  let peerEventSeq = Date.now()
+  const pushPeerEvent = (event) => {
+    peerEventSeq += 1
+    state.peerEvents.push({
+      id: peerEventSeq,
+      at: Date.now(),
+      kind: event.kind,
+      from: event.task?.from ?? '',
+      to: event.task?.to ?? '',
+      sessionId: event.sessionId ?? event.task?.sessionId ?? '',
+      text: `${(event.kind === 'received' ? event.task?.message : event.kind === 'done' ? event.reply : event.error) ?? ''}`.slice(0, 160),
+    })
+    if (state.peerEvents.length > 50) state.peerEvents.splice(0, state.peerEvents.length - 50)
+  }
+
   if (peerReady) {
     ctx.effect(() => {
       let stop
@@ -536,7 +554,7 @@ export async function apply(ctx, config = {}) {
           if (typeof ctx.get === 'function' && ctx.get('sessionController') === undefined) {
             log('warn', 'peer 已配置，但当前 profile 没有 sessionController，只能收不能投')
           }
-          stop = startPeerLoop({ ctx, connection: peerConnection, peer, log })
+          stop = startPeerLoop({ ctx, connection: peerConnection, peer, log, onEvent: pushPeerEvent })
           log('info', `peer「${peer.name}」已接入信箱 ${peer.mailbox}，每 ${peer.pollMs}ms 轮询`)
         })
         .catch((error) => log('warn', `peer 初始化失败：${error?.message ?? error}`))

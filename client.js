@@ -273,6 +273,18 @@ window.__ModuleLoader__.load({
         box-shadow:0 24px 70px rgba(0,0,0,.28),0 2px 8px rgba(0,0,0,.10);overflow:hidden;
         animation:wsc-rise .30s var(--wsc-ease);}
       @keyframes wsc-fade{from{opacity:0}to{opacity:1}}
+  .wsc-peer-toasts{position:fixed;right:18px;bottom:18px;z-index:1150;display:flex;flex-direction:column;
+  gap:8px;pointer-events:auto;max-width:340px;}
+  .wsc-peer-toast{display:flex;gap:9px;align-items:flex-start;padding:10px 12px;border-radius:12px;
+  background:${T.bg};border:1px solid var(--wsc-hair);box-shadow:0 12px 32px rgba(0,0,0,.22);
+  font-size:12px;line-height:1.5;animation:wsc-peer-in .22s var(--wsc-ease);cursor:pointer;}
+  .wsc-peer-toast[data-kind="received"]{border-left:3px solid ${T.accent};}
+  .wsc-peer-toast[data-kind="done"]{border-left:3px solid ${T.ok};}
+  .wsc-peer-toast[data-kind="failed"]{border-left:3px solid ${T.bad};}
+  .wsc-peer-toast-head{font-weight:600;font-size:12px;}
+  .wsc-peer-toast-body{color:${T.dim};word-break:break-all;}
+  @keyframes wsc-peer-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
       @keyframes wsc-rise{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
       @media (prefers-reduced-motion:reduce){.wsc-backdrop,.wsc-sheet{animation:none}}
 
@@ -1676,11 +1688,77 @@ window.__ModuleLoader__.load({
       )
     }
 
+    function PeerToasts() {
+      const [items, setItems] = useState([])
+      useEffect(() => {
+        let alive = true
+        let cursor = 0
+        const tick = async () => {
+          try {
+            const data = await request(`/peer/events?since=${cursor}`)
+            if (!alive || !Array.isArray(data?.events) || data.events.length === 0) return
+            cursor = typeof data.cursor === 'number' ? data.cursor : cursor
+            setItems((prev) => [...prev, ...data.events].slice(-4))
+            for (const event of data.events) {
+              setTimeout(() => {
+                setItems((prev) => prev.filter((entry) => entry.id !== event.id))
+              }, 10000)
+            }
+          } catch {
+            /* 插件没起来时静默 */
+          }
+        }
+        const timer = setInterval(tick, 5000)
+        tick()
+        return () => {
+          alive = false
+          clearInterval(timer)
+        }
+      }, [])
+
+      if (items.length === 0) return null
+
+      const titleOf = (kind) =>
+        kind === 'received' ? '收到跨机任务' : kind === 'done' ? '任务已执行完' : '任务执行失败'
+
+      return h(
+        'div',
+        { className: 'wsc-peer-toasts' },
+        items.map((item) =>
+          h(
+            'div',
+            {
+              key: item.id,
+              className: 'wsc-peer-toast',
+              'data-kind': item.kind,
+              title: '点击关闭',
+              onClick: () => setItems((prev) => prev.filter((entry) => entry.id !== item.id)),
+            },
+            h(Glyph, {
+              name: item.kind === 'failed' ? 'alert' : item.kind === 'done' ? 'check' : 'chat',
+              size: 14,
+              color: item.kind === 'failed' ? T.bad : item.kind === 'done' ? T.ok : T.accent,
+            }),
+            h(
+              'div',
+              { style: { minWidth: 0 } },
+              h('div', { className: 'wsc-peer-toast-head' }, `${titleOf(item.kind)} · ${item.from}`),
+              h('div', { className: 'wsc-peer-toast-body' }, item.text || item.sessionId || ''),
+            ),
+          ),
+        ),
+      )
+    }
+
     function Overlay() {
       const [, bump] = useState(0)
       useEffect(() => ui.subscribe(() => bump((value) => value + 1)), [])
-      if (!ui.open) return null
-      return h(Panel, { onClose: () => ui.set({ open: false }) })
+      return h(
+        React.Fragment,
+        null,
+        ui.open ? h(Panel, { onClose: () => ui.set({ open: false }) }) : null,
+        h(PeerToasts),
+      )
     }
 
     return {
