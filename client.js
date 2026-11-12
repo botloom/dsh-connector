@@ -48,6 +48,8 @@ window.__ModuleLoader__.load({
       layers: 'M12 3 3 8l9 5 9-5-9-5ZM3 13l9 5 9-5',
       send: 'M4 12 21 4l-7 17-3-7-7-2Z',
       sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z',
+      download: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M4 19h16',
+      upload: 'M12 20V9M7.5 13.5 12 9l4.5 4.5M4 5h16',
     }
 
     function Glyph({ name, size = 16, color = 'currentColor', stroke = 1.6 }) {
@@ -1284,26 +1286,8 @@ window.__ModuleLoader__.load({
               onChange: importFile,
             }),
             h(IconButton, { icon: 'wave', title: t('testAll'), size: 14, onClick: testAll }),
-            h(
-              'button',
-              {
-                type: 'button',
-                title: '把全部连接导出成 JSON（含密码）',
-                onClick: exportConfig,
-                style: { border: 0, background: 'transparent', color: T.dim, font: 'inherit', fontSize: 11, cursor: 'pointer', padding: '0 4px' },
-              },
-              '导出',
-            ),
-            h(
-              'button',
-              {
-                type: 'button',
-                title: '从 JSON 文件导入连接',
-                onClick: () => fileRef.current?.click(),
-                style: { border: 0, background: 'transparent', color: T.dim, font: 'inherit', fontSize: 11, cursor: 'pointer', padding: '0 4px' },
-              },
-              '导入',
-            ),
+            h(IconButton, { icon: 'download', title: '导出配置（JSON，含密码）', size: 14, onClick: exportConfig }),
+            h(IconButton, { icon: 'upload', title: '导入配置（JSON 文件）', size: 14, onClick: () => fileRef.current?.click() }),
             h(IconButton, { icon: 'plus', title: t('add'), size: 15, onClick: () => setEditing({ conn: null }) }),
           ),
         ),
