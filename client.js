@@ -442,6 +442,19 @@ window.__ModuleLoader__.load({
         display:flex;align-items:center;gap:7px;height:34px;padding:0 15px;border-radius:999px;
         background:color-mix(in srgb,${T.text} 90%,transparent);color:${T.bg};font-size:12.5px;font-weight:500;
         box-shadow:0 8px 26px rgba(0,0,0,.30);animation:wsc-toast .26s var(--wsc-ease);}
+
+  .wsc-confirm{position:fixed;inset:0;z-index:1100;display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.38);pointer-events:auto;animation:wsc-fade .16s var(--wsc-ease);}
+  .wsc-confirm-card{width:min(360px,calc(100% - 32px));background:${T.bg};border:1px solid var(--wsc-hair);
+  border-radius:14px;box-shadow:0 18px 48px rgba(0,0,0,.28);padding:16px;display:flex;flex-direction:column;gap:10px;}
+  .wsc-confirm-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;}
+  .wsc-confirm-body{font-size:12px;color:${T.dim};line-height:1.65;word-break:break-all;}
+  .wsc-confirm-name{font-weight:600;color:${T.text};}
+  .wsc-confirm-meta{margin-top:4px;color:${T.dim};}
+  .wsc-confirm-hint{margin-top:8px;color:${T.dim};opacity:.85;}
+  .wsc-confirm-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:2px;}
+  @keyframes wsc-fade{from{opacity:0}to{opacity:1}}
+
       @keyframes wsc-toast{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
 
       .wsc-menu{position:fixed;z-index:1100;min-width:190px;padding:5px;border-radius:10px;
@@ -644,6 +657,56 @@ window.__ModuleLoader__.load({
         'data-size': size,
         onClick: () => onChange(!on),
       })
+    }
+
+    function ConfirmDelete({ conn, onCancel, onConfirm }) {
+      const [busy, setBusy] = useState(false)
+      useEffect(() => {
+        const onKey = (event) => {
+          if (event.key === 'Escape') onCancel()
+        }
+        window.addEventListener('keydown', onKey)
+        return () => window.removeEventListener('keydown', onKey)
+      }, [onCancel])
+
+      const confirm = async () => {
+        setBusy(true)
+        try {
+          await onConfirm()
+        } finally {
+          setBusy(false)
+        }
+      }
+
+      return h(
+        'div',
+        {
+          className: 'wsc-confirm',
+          onMouseDown: (event) => {
+            if (event.target === event.currentTarget) onCancel()
+          },
+        },
+        h(
+          'div',
+          { className: 'wsc-confirm-card', role: 'dialog', 'aria-modal': 'true', 'aria-label': '删除连接' },
+          h('div', { className: 'wsc-confirm-title' }, h(Glyph, { name: 'alert', size: 15, color: T.bad }), '删除连接'),
+          h(
+            'div',
+            { className: 'wsc-confirm-body' },
+            '确定删除 ',
+            h('span', { className: 'wsc-confirm-name' }, conn.name),
+            ' 吗？',
+            conn.endpoint ? h('div', { className: 'wsc-confirm-meta' }, conn.endpoint) : null,
+            h('div', { className: 'wsc-confirm-hint' }, '配置会从 profile 里移除，密码 / Token 一并删除，不能撤销。'),
+          ),
+          h(
+            'div',
+            { className: 'wsc-confirm-actions' },
+            h(Button, { onClick: onCancel, children: '取消' }),
+            h(Button, { variant: 'danger', busy, onClick: confirm, children: busy ? '删除中…' : '删除' }),
+          ),
+        ),
+      )
     }
 
     function Banner({ tone = 'bad', children }) {
@@ -1233,9 +1296,12 @@ window.__ModuleLoader__.load({
         [load, notify],
       )
 
+      const [confirmDelete, setConfirmDelete] = useState(null)
+
+      const requestRemove = useCallback((conn) => setConfirmDelete(conn), [])
+
       const removeConnection = useCallback(
         async (conn) => {
-          if (!window.confirm(`${t('deleteConfirm')}\n\n${conn.name}\n${conn.endpoint ?? ''}`)) return
           try {
             await post('/connection', { action: 'delete', name: conn.name })
             notify(`${t('deleted')} · ${conn.name}`)
@@ -1401,7 +1467,7 @@ window.__ModuleLoader__.load({
           onToast: notify,
           onTest: testOne,
           onEdit: (conn) => setEditing({ conn }),
-          onRemove: removeConnection,
+          onRemove: requestRemove,
           onToggle: toggleConnection,
         })
       } else {
@@ -1434,7 +1500,7 @@ window.__ModuleLoader__.load({
                 },
               },
               { separator: true },
-              { id: 'delete', icon: 'trash', label: t('remove'), danger: true, onSelect: () => removeConnection(menu.conn) },
+              { id: 'delete', icon: 'trash', label: t('remove'), danger: true, onSelect: () => requestRemove(menu.conn) },
             ]
 
       return h(
@@ -1490,6 +1556,17 @@ window.__ModuleLoader__.load({
         ),
         menu !== null ? h(ContextMenu, { x: menu.x, y: menu.y, items: menuItems, onClose: () => setMenu(null) }) : null,
         toast ? h('div', { className: 'wsc-toast' }, h(Glyph, { name: 'check', size: 14 }), toast) : null,
+        confirmDelete !== null
+          ? h(ConfirmDelete, {
+              conn: confirmDelete,
+              onCancel: () => setConfirmDelete(null),
+              onConfirm: async () => {
+                const target = confirmDelete
+                setConfirmDelete(null)
+                await removeConnection(target)
+              },
+            })
+          : null,
       )
     }
 

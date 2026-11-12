@@ -50,10 +50,8 @@ const server = createServer(async (req, res) => {
     return send(401, { error: 'unauthorized' })
   }
   if (url.pathname === '/crumbIssuer/api/json') {
-    // 真实 Jenkins：crumb 绑定在会话上，没带 cookie 不给
-    if (!`${req.headers.cookie ?? ''}`.includes('JSESSIONID=s1')) {
-      return send(403, 'no session', 'text/plain')
-    }
+    // 真实 Jenkins：这一步下发 JSESSIONID，crumb 绑定该会话
+    res.setHeader('set-cookie', 'JSESSIONID=s1; Path=/; HttpOnly')
     return send(200, { crumbRequestField: 'Jenkins-Crumb', crumb: 'abc123' })
   }
   if (req.method === 'POST' && url.pathname.startsWith('/job/')) {
@@ -61,6 +59,7 @@ const server = createServer(async (req, res) => {
       triggered += 1
       return send(201, '')
     }
+    // 必须同时带会话 cookie 和 crumb
     const cookieOk = `${req.headers.cookie ?? ''}`.includes('JSESSIONID=s1')
     if (req.headers['jenkins-crumb'] !== 'abc123' || !cookieOk) {
       res.setHeader('set-cookie', 'JSESSIONID=s1; Path=/')
