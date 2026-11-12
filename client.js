@@ -406,6 +406,8 @@ window.__ModuleLoader__.load({
         border-color:color-mix(in srgb,${T.accent} 62%,transparent);
         box-shadow:0 0 0 3px color-mix(in srgb,${T.accent} 16%,transparent);}
       .wsc-input::placeholder{color:color-mix(in srgb,${T.dim} 78%,transparent);}
+  .wsc-textarea{height:auto;min-height:110px;max-width:none;padding:9px 11px;line-height:1.6;
+  resize:vertical;font-family:inherit;}
       .wsc-switch{position:relative;width:42px;height:25px;border-radius:999px;border:0;padding:0;
         background:color-mix(in srgb,${T.text} 16%,transparent);cursor:pointer;flex-shrink:0;
         transition:background .22s var(--wsc-ease);}
@@ -953,7 +955,10 @@ window.__ModuleLoader__.load({
       const [test, setTest] = useState(null)
 
       useEffect(() => {
-        setForm(buildForm(conn, manifestFor(kinds, kind)))
+        setForm((prev) => ({
+          ...buildForm(conn, manifestFor(kinds, kind)),
+          notes: prev.notes ?? conn?.notes ?? '',
+        }))
         setTest(null)
       }, [kind])
 
@@ -1124,8 +1129,8 @@ window.__ModuleLoader__.load({
               Field,
               { label: '说明', hint: '比如常用目录、会话 id 是干什么的、注意事项' },
               h('textarea', {
-                className: 'wsc-input',
-                rows: 3,
+                className: 'wsc-input wsc-textarea',
+                rows: 6,
                 value: form.notes ?? '',
                 placeholder: '例如：\n常用目录 /data/app/logs\n会话 session-xxx 用于前端联调',
                 onChange: (event) => setValue('notes', event.target.value),
