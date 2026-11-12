@@ -819,11 +819,18 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'wsc-detail-actions' },
             h(Button, { icon: 'wave', busy: testing, onClick: runTest, children: testing ? t('testing') : t('test') }),
-            h(Button, {
-              icon: conn.disabled === true ? 'check' : 'bolt',
-              onClick: () => onToggle(conn),
-              children: conn.disabled === true ? '启用' : '禁用',
-            }),
+            h(
+              'label',
+              {
+                style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: T.dim, cursor: 'pointer' },
+              },
+              h(Switch, {
+                on: conn.disabled !== true,
+                label: '启用这个连接',
+                onChange: (next) => onToggle(conn, !next),
+              }),
+              conn.disabled === true ? '已禁用' : '已启用',
+            ),
             h(Button, { icon: 'edit', onClick: () => onEdit(conn), children: t('edit') }),
             h(Button, { variant: 'danger', icon: 'trash', onClick: () => onRemove(conn), children: t('remove') }),
           ),
@@ -1217,8 +1224,8 @@ window.__ModuleLoader__.load({
       )
 
       const toggleConnection = useCallback(
-        async (conn) => {
-          const disabled = conn.disabled !== true
+        async (conn, nextDisabled) => {
+          const disabled = typeof nextDisabled === 'boolean' ? nextDisabled : conn.disabled !== true
           try {
             await post('/connection', { action: 'toggle', name: conn.name, disabled })
             notify(`${disabled ? '已禁用' : '已启用'} · ${conn.name}`)
