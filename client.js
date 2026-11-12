@@ -50,6 +50,7 @@ window.__ModuleLoader__.load({
       sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z',
       download: 'M12 4v11M7.5 10.5 12 15l4.5-4.5M4 19h16',
       upload: 'M12 20V9M7.5 13.5 12 9l4.5 4.5M4 5h16',
+      more: 'M6 12h.01M12 12h.01M18 12h.01',
     }
 
     function Glyph({ name, size = 16, color = 'currentColor', stroke = 1.6 }) {
@@ -413,6 +414,12 @@ window.__ModuleLoader__.load({
         transition:transform .22s var(--wsc-ease);}
       .wsc-switch[data-on="true"]{background:${T.ok};}
       .wsc-switch[data-on="true"]::after{transform:translateX(17px);}
+  .wsc-switch[data-size="sm"]{width:30px;height:18px;flex-shrink:0;}
+  .wsc-switch[data-size="sm"]::after{width:14px;height:14px;top:2px;left:2px;}
+  .wsc-switch[data-size="sm"][data-on="true"]::after{transform:translateX(12px);}
+  .wsc-row-main{display:flex;align-items:center;gap:10px;flex:1;min-width:0;border:0;
+  background:transparent;color:inherit;font:inherit;text-align:left;padding:0;cursor:pointer;}
+  .wsc-row[data-disabled="true"] .wsc-row-name{color:${T.dim};}
       .wsc-kindgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:2px 0 4px;}
       .wsc-kindcard{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:10px;
         border:1px solid transparent;background:var(--wsc-fill);cursor:pointer;text-align:left;color:${T.text};
@@ -626,7 +633,7 @@ window.__ModuleLoader__.load({
       )
     }
 
-    function Switch({ on, onChange, label }) {
+    function Switch({ on, onChange, label, size }) {
       return h('button', {
         type: 'button',
         className: 'wsc-switch',
@@ -634,6 +641,7 @@ window.__ModuleLoader__.load({
         role: 'switch',
         'aria-checked': on,
         'aria-label': label,
+        'data-size': size,
         onClick: () => onChange(!on),
       })
     }
@@ -819,18 +827,6 @@ window.__ModuleLoader__.load({
             'div',
             { className: 'wsc-detail-actions' },
             h(Button, { icon: 'wave', busy: testing, onClick: runTest, children: testing ? t('testing') : t('test') }),
-            h(
-              'label',
-              {
-                style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: T.dim, cursor: 'pointer' },
-              },
-              h(Switch, {
-                on: conn.disabled !== true,
-                label: '启用这个连接',
-                onChange: (next) => onToggle(conn, !next),
-              }),
-              conn.disabled === true ? '已禁用' : '已启用',
-            ),
             h(Button, { icon: 'edit', onClick: () => onEdit(conn), children: t('edit') }),
             h(Button, { variant: 'danger', icon: 'trash', onClick: () => onRemove(conn), children: t('remove') }),
           ),
@@ -1133,6 +1129,7 @@ window.__ModuleLoader__.load({
       const [status, setStatus] = useState({})
       const [toast, setToast] = useState(null)
       const [menu, setMenu] = useState(null)
+      const [ioMenu, setIoMenu] = useState(null)
       const searchRef = useRef(null)
 
       const notify = useCallback((message) => {
@@ -1315,8 +1312,15 @@ window.__ModuleLoader__.load({
               onChange: importFile,
             }),
             h(IconButton, { icon: 'wave', title: t('testAll'), size: 14, onClick: testAll }),
-            h(IconButton, { icon: 'download', title: '导出配置（JSON，含密码）', size: 14, onClick: exportConfig }),
-            h(IconButton, { icon: 'upload', title: '导入配置（JSON 文件）', size: 14, onClick: () => fileRef.current?.click() }),
+            h(IconButton, {
+              icon: 'more',
+              title: '导入 / 导出配置',
+              size: 15,
+              onClick: (event) => {
+                const rect = event.currentTarget.getBoundingClientRect()
+                setIoMenu({ x: rect.left - 140, y: rect.bottom + 4 })
+              },
+            }),
             h(IconButton, { icon: 'plus', title: t('add'), size: 15, onClick: () => setEditing({ conn: null }) }),
           ),
         ),
@@ -1334,35 +1338,46 @@ window.__ModuleLoader__.load({
                     const itemManifest = manifestFor(kinds, conn.kind)
                     const cat = categoryOf(itemManifest)
                     return h(
-                      'button',
+                      'div',
                       {
                         key: conn.name,
-                        type: 'button',
                         className: 'wsc-row',
                         'data-active': conn.name === selected ? 'true' : 'false',
                         'data-disabled': conn.disabled === true ? 'true' : 'false',
-                        style: conn.disabled === true ? { opacity: 0.5 } : undefined,
-                        onClick: () => {
-                          setSelected(conn.name)
-                          setEditing(null)
-                        },
                         onContextMenu: (event) => {
                           event.preventDefault()
                           setMenu({ x: event.clientX, y: event.clientY, conn })
                         },
                       },
                       h(
-                        'span',
-                        { className: 'wsc-row-icon', style: { color: cat.tint } },
-                        h(Glyph, { name: KIND_ICON[conn.kind] ?? cat.icon, size: 14 }),
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'wsc-row-main',
+                          onClick: () => {
+                            setSelected(conn.name)
+                            setEditing(null)
+                          },
+                        },
+                        h(
+                          'span',
+                          { className: 'wsc-row-icon', style: { color: conn.disabled === true ? T.dim : cat.tint } },
+                          h(Glyph, { name: KIND_ICON[conn.kind] ?? cat.icon, size: 14 }),
+                        ),
+                        h(
+                          'span',
+                          { className: 'wsc-row-body' },
+                          h('span', { className: 'wsc-row-name' }, conn.name),
+                          h('span', { className: 'wsc-row-meta' }, itemManifest?.label ?? conn.kind),
+                        ),
+                        h('span', { className: 'wsc-dot', 'data-state': status[conn.name]?.state ?? 'idle' }),
                       ),
-                      h(
-                        'span',
-                        { className: 'wsc-row-body' },
-                        h('span', { className: 'wsc-row-name' }, conn.name),
-                        h('span', { className: 'wsc-row-meta' }, itemManifest?.label ?? conn.kind),
-                      ),
-                      h('span', { className: 'wsc-dot', 'data-state': status[conn.name]?.state ?? 'idle' }),
+                      h(Switch, {
+                        on: conn.disabled !== true,
+                        size: 'sm',
+                        label: `启用 ${conn.name}`,
+                        onChange: (next) => toggleConnection(conn, !next),
+                      }),
                     )
                   }),
                 ),
@@ -1483,6 +1498,17 @@ window.__ModuleLoader__.load({
           ),
         ),
         menu !== null ? h(ContextMenu, { x: menu.x, y: menu.y, items: menuItems, onClose: () => setMenu(null) }) : null,
+        ioMenu !== null
+          ? h(ContextMenu, {
+              x: ioMenu.x,
+              y: ioMenu.y,
+              items: [
+                { id: 'export', icon: 'download', label: '导出配置（含密码）', onSelect: exportConfig },
+                { id: 'import', icon: 'upload', label: '导入配置…', onSelect: () => fileRef.current?.click() },
+              ],
+              onClose: () => setIoMenu(null),
+            })
+          : null,
         toast ? h('div', { className: 'wsc-toast' }, h(Glyph, { name: 'check', size: 14 }), toast) : null,
       )
     }
