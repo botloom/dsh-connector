@@ -286,6 +286,16 @@ async function main() {
     JSON.stringify(routes),
   )
   check('parseRoutes 空输入', parseRoutes('').length === 0 && parseRoutes(undefined).length === 0)
+  const routeArray = parseRoutes([
+    { id: 'session-x', label: '闲聊', purpose: '兜底', default: true },
+    { id: '  ', label: '空行' },
+    { id: 'session-y' },
+  ])
+  check(
+    'parseRoutes 支持数组（面板表格）',
+    routeArray.length === 2 && routeArray[0].default === true && routeArray[1].id === 'session-y',
+    JSON.stringify(routeArray),
+  )
   check('store toggle 禁用', toggled.config.connections[0].disabled === true && /已禁用/.test(toggled.message))
   const toggledBack = applyConnectionChange(toggled.config, { action: 'toggle', name: 'db', disabled: false })
   check('store toggle 重新启用', toggledBack.config.connections[0].disabled === false)

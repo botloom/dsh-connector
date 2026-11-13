@@ -422,6 +422,15 @@ window.__ModuleLoader__.load({
       .wsc-input::placeholder{color:color-mix(in srgb,${T.dim} 78%,transparent);}
   .wsc-textarea{height:auto;min-height:110px;max-width:none;padding:9px 11px;line-height:1.6;
   resize:vertical;font-family:inherit;}
+  .wsc-routes{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
+  .wsc-route{display:grid;grid-template-columns:22px 1.5fr 1fr 1.2fr 30px;gap:6px;align-items:center;}
+  .wsc-route-default{display:flex;align-items:center;justify-content:center;}
+  .wsc-route input[type="radio"]{accent-color:${T.accent};width:14px;height:14px;cursor:pointer;}
+  .wsc-routes-empty{font-size:11.5px;color:${T.dim};padding:2px 0 4px;}
+  .wsc-addrow{border:1px dashed var(--wsc-hair);border-radius:8px;background:transparent;color:${T.dim};
+  font:inherit;font-size:12px;padding:6px 10px;cursor:pointer;width:100%;text-align:left;}
+  .wsc-addrow:hover{color:${T.text};border-color:${T.border2};}
+
       .wsc-switch{position:relative;width:42px;height:25px;border-radius:999px;border:0;padding:0;
         background:color-mix(in srgb,${T.text} 16%,transparent);cursor:pointer;flex-shrink:0;
         transition:background .22s var(--wsc-ease);}
@@ -673,6 +682,101 @@ window.__ModuleLoader__.load({
         'data-size': size,
         onClick: () => onChange(!on),
       })
+    }
+
+    function normalizeRouteValue(value) {
+      if (Array.isArray(value)) {
+        return value.map((row) => ({
+          id: typeof row?.id === 'string' ? row.id : '',
+          label: typeof row?.label === 'string' ? row.label : '',
+          purpose: typeof row?.purpose === 'string' ? row.purpose : '',
+          default: row?.default === true,
+        }))
+      }
+      if (typeof value !== 'string') return []
+      return value
+        .split(/\r?\n/)
+        .map((raw) => raw.trim())
+        .filter((line) => line !== '' && !line.startsWith('#'))
+        .map((line) => {
+          const isDefault = line.startsWith('*')
+          const parts = (isDefault ? line.slice(1) : line).split('|').map((part) => part.trim())
+          return {
+            id: parts[0] ?? '',
+            label: parts[1] ?? '',
+            purpose: parts[2] ?? '',
+            default: isDefault,
+          }
+        })
+        .filter((row) => row.id !== '')
+    }
+
+    function RouteTable({ value, sessions, onChange }) {
+      const rows = Array.isArray(value) ? value : []
+      const setRow = (index, patch) => onChange(rows.map((row, i) => (i === index ? { ...row, ...patch } : row)))
+      const removeRow = (index) => onChange(rows.filter((_, i) => i !== index))
+      const addRow = () => onChange([...rows, { id: '', label: '', purpose: '', default: rows.length === 0 }])
+      const makeDefault = (index) => onChange(rows.map((row, i) => ({ ...row, default: i === index })))
+
+      const input = (row, index, key, placeholder, extra = {}) =>
+        h('input', {
+          className: 'wsc-input',
+          value: row[key] ?? '',
+          placeholder,
+          list: key === 'id' ? 'wsconn-session-list' : undefined,
+          onChange: (event) => setRow(index, { [key]: event.target.value }),
+          style: { maxWidth: 'none', ...(extra.style ?? {}) },
+        })
+
+      return h(
+        'div',
+        null,
+        h(
+          'div',
+          { className: 'wsc-routes' },
+          rows.length === 0
+            ? h('div', { className: 'wsc-routes-empty' }, '还没有会话——下面点「添加会话」，填本机的 sessionId')
+            : null,
+          rows.map((row, index) =>
+            h(
+              'div',
+              { key: index, className: 'wsc-route' },
+              h(
+                'label',
+                { className: 'wsc-route-default', title: '默认会话（不指定 sessionId 时投给它）' },
+                h('input', {
+                  type: 'radio',
+                  name: 'wsconn-route-default',
+                  checked: row.default === true,
+                  onChange: () => makeDefault(index),
+                }),
+              ),
+              input(row, index, 'id', 'session-xxxx', { style: { fontFamily: 'ui-monospace, monospace' } }),
+              input(row, index, 'label', '名称，如 闲聊'),
+              input(row, index, 'purpose', '用途，如 兜底任务'),
+              h(
+                'button',
+                { type: 'button', className: 'wsc-iconbtn', title: '删除这一行', onClick: () => removeRow(index) },
+                h(Glyph, { name: 'trash', size: 13 }),
+              ),
+            ),
+          ),
+        ),
+        h('datalist', { id: 'wsconn-session-list' },
+          (sessions ?? []).map((item) =>
+            h(
+              'option',
+              { key: item.sessionId, value: item.sessionId },
+              `${new Date(item.updatedAt).toLocaleString()}${item.blank ? ' · 空会话' : item.running ? ' · 运行中' : ''}`,
+            ),
+          ),
+        ),
+        h(
+          'button',
+          { type: 'button', className: 'wsc-addrow', onClick: addRow },
+          '＋ 添加会话',
+        ),
+      )
     }
 
     function ConfirmDelete({ conn, onCancel, onConfirm }) {
@@ -951,6 +1055,10 @@ window.__ModuleLoader__.load({
       const form = { name: conn?.name ?? '', kind: conn?.kind ?? manifest?.kind ?? '' }
       for (const field of manifest?.fields ?? []) {
         const value = conn?.[field.name]
+        if (field.type === 'routes') {
+          form[field.name] = normalizeRouteValue(value)
+          continue
+        }
         form[field.name] =
           typeof value === 'boolean' ? value : value === undefined || value === null ? '' : String(value)
       }
@@ -967,6 +1075,21 @@ window.__ModuleLoader__.load({
       const [testing, setTesting] = useState(false)
       const [error, setError] = useState(null)
       const [test, setTest] = useState(null)
+      const [sessions, setSessions] = useState([])
+
+      useEffect(() => {
+        let alive = true
+        request('/sessions')
+          .then((payload) => {
+            if (alive) setSessions(Array.isArray(payload?.sessions) ? payload.sessions : [])
+          })
+          .catch(() => {
+            if (alive) setSessions([])
+          })
+        return () => {
+          alive = false
+        }
+      }, [])
 
       useEffect(() => {
         setForm((prev) => ({
@@ -983,6 +1106,18 @@ window.__ModuleLoader__.load({
     body.notes = `${form.notes ?? ''}`.trim()
         for (const field of manifest?.fields ?? []) {
           const raw = form[field.name]
+          if (field.type === 'routes') {
+            const rows = (Array.isArray(raw) ? raw : [])
+              .filter((row) => `${row?.id ?? ''}`.trim() !== '')
+              .map((row) => ({
+                id: `${row.id}`.trim(),
+                label: `${row.label ?? ''}`.trim(),
+                purpose: `${row.purpose ?? ''}`.trim(),
+                default: row.default === true,
+              }))
+            if (rows.length > 0) body.routes = rows
+            continue
+          }
           if (field.type === 'boolean') {
             if (raw === true) body[field.name] = true
             continue
@@ -1176,6 +1311,17 @@ window.__ModuleLoader__.load({
                       h(Switch, {
                         on: value === true,
                         label: field.label ?? field.name,
+                        onChange: (next) => setValue(field.name, next),
+                      }),
+                    )
+                  }
+                  if (field.type === 'routes') {
+                    return h(
+                      Field,
+                      { key: field.name, label: field.label ?? field.name, hint, required: field.required },
+                      h(RouteTable, {
+                        value: Array.isArray(form[field.name]) ? form[field.name] : [],
+                        sessions,
                         onChange: (next) => setValue(field.name, next),
                       }),
                     )
