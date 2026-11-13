@@ -893,6 +893,83 @@ export async function apply(ctx, config = {}) {
     presentCall: (args) => present('等待同事结果', 'read', args?.taskId),
   })
 
+  // ---- 斜杠命令：/peer 直接发任务，/peers 看节点 ----
+  const registerCommands = (service) => {
+    if (service === undefined || service === null) return
+
+    ctx.effect(() =>
+      service.register({
+        name: 'peer',
+        description: '给同事的 DSH 节点发一条跨机任务',
+        input: { hint: '<节点名> <消息>' },
+        async handler(invocation) {
+          const raw = `${invocation?.rawInput ?? ''}`.trim()
+          const gap = raw.search(/\s/)
+          const to = gap < 0 ? raw : raw.slice(0, gap)
+          const message = gap < 0 ? '' : raw.slice(gap + 1).trim()
+          if (to === '' || message === '') {
+            return { kind: 'error', text: '用法：/peer <节点名> <消息>' }
+          }
+          try {
+            const { peer, connection } = requirePeer()
+            const peers = await listPeers(connection)
+            const target = peers.find((item) => item.name === to)
+            if (target === undefined) {
+              const known = peers.map((item) => item.name).join('、')
+              return { kind: 'error', text: `没有这个节点：${to}${known === '' ? '' : `（已知：${known}）`}` }
+            }
+            const id = await sendTask(connection, { from: peer.name, to, message })
+            return {
+              kind: 'success',
+              text: `已发给 ${to}（${target.online === true ? '在线' : '离线'}）\ntaskId=${id}`,
+            }
+          } catch (error) {
+            return { kind: 'error', text: `发送失败：${error?.message ?? error}` }
+          }
+        },
+      }),
+    )
+
+    ctx.effect(() =>
+      service.register({
+        name: 'peers',
+        description: '列出跨机节点（在线状态、工作目录、能力）',
+        handler: async () => {
+          try {
+            const { connection } = requirePeer()
+            const peers = await listPeers(connection)
+            if (peers.length === 0) return { kind: 'success', text: '信箱里还没有任何节点心跳。' }
+            return {
+              kind: 'success',
+              text: peers
+                .map((item) => {
+                  const caps = Array.isArray(item.capabilities) && item.capabilities.length > 0
+                    ? ` · 能力：${item.capabilities.slice(0, 6).join('、')}${item.capabilities.length > 6 ? '…' : ''}`
+                    : ''
+                  return `${item.online === true ? '在线' : '离线'}  ${item.name}${item.cwd === '' ? '' : ` · ${item.cwd}`}${caps}`
+                })
+                .join('\n'),
+            }
+          } catch (error) {
+            return { kind: 'error', text: `读取失败：${error?.message ?? error}` }
+          }
+        },
+      }),
+    )
+  }
+
+  let commandsInjected = false
+  try {
+    if (typeof ctx.inject === 'function') {
+      commandsInjected = true
+      ctx.inject(['commands'], (scope) => registerCommands(scope?.commands ?? scope?.get?.('commands')))
+    }
+  } catch (error) {
+    commandsInjected = false
+    log('warn', `斜杠命令响应式注册失败，改用直接取：${error?.message ?? error}`)
+  }
+  if (!commandsInjected) registerCommands(ctx.get('commands'))
+
   // 管理面板的 JSON 接口；只有 Web 半边（或带 webServer 的组合）才注册。
   // 注意：新版 DSH 里 webServer 可能比插件晚就绪，所以优先用响应式 inject，
   // 直接 ctx.get() 只在 inject 不可用时兜底。
