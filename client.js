@@ -428,6 +428,12 @@ window.__ModuleLoader__.load({
   .wsc-route-title{font-size:10.5px;color:${T.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .wsc-route input[type="radio"]{accent-color:${T.accent};width:14px;height:14px;cursor:pointer;}
   .wsc-routes-empty{font-size:11.5px;color:${T.dim};padding:2px 0 4px;}
+  .wsc-rv{width:100%;border-collapse:collapse;font-size:11.5px;}
+  .wsc-rv th{text-align:left;font-weight:600;color:${T.dim};padding:4px 8px 4px 0;border-bottom:1px solid var(--wsc-hair);}
+  .wsc-rv td{padding:5px 8px 5px 0;border-bottom:1px solid var(--wsc-hair);vertical-align:top;}
+  .wsc-rv tr:last-child td{border-bottom:0;}
+  .wsc-rv-def{width:38px;color:${T.accent};text-align:center;}
+  .wsc-rv-id{font-family:ui-monospace,monospace;color:${T.dim};word-break:break-all;}
   .wsc-addrow{border:1px dashed var(--wsc-hair);border-radius:8px;background:transparent;color:${T.dim};
   font:inherit;font-size:12px;padding:6px 10px;cursor:pointer;width:100%;text-align:left;}
   .wsc-addrow:hover{color:${T.text};border-color:${T.border2};}
@@ -993,23 +999,40 @@ window.__ModuleLoader__.load({
         if (field.name === 'allowWrite') continue
         if (field.type === 'routes') {
           const list = Array.isArray(value) ? value : []
-          if (list.length === 0) {
-            rows.push([field.label ?? field.name, '未配置（不接收任何任务）'])
-            continue
-          }
           rows.push([
             field.label ?? field.name,
-            h(
-              'div',
-              { style: { display: 'flex', flexDirection: 'column', gap: 3 } },
-              list.map((route, index) =>
-                h(
-                  'div',
-                  { key: index },
-                  `${route.default === true ? '★ ' : ''}${route.label || route.id}${route.purpose ? ` · ${route.purpose}` : ''}`,
+            list.length === 0
+              ? '未配置（不接收任何任务）'
+              : h(
+                  'table',
+                  { className: 'wsc-rv' },
+                  h(
+                    'thead',
+                    null,
+                    h(
+                      'tr',
+                      null,
+                      h('th', { className: 'wsc-rv-def' }, '默认'),
+                      h('th', null, '名称'),
+                      h('th', null, '用途'),
+                      h('th', null, '会话'),
+                    ),
+                  ),
+                  h(
+                    'tbody',
+                    null,
+                    list.map((route, index) =>
+                      h(
+                        'tr',
+                        { key: index },
+                        h('td', { className: 'wsc-rv-def' }, route.default === true ? '★' : ''),
+                        h('td', null, route.label === '' ? '—' : route.label),
+                        h('td', null, route.purpose === '' ? '—' : route.purpose),
+                        h('td', { className: 'wsc-rv-id' }, route.id),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ),
           ])
           continue
         }
