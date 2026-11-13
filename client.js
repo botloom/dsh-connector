@@ -333,7 +333,8 @@ window.__ModuleLoader__.load({
   .wsc-peer{display:flex;gap:8px;align-items:flex-start;width:100%;border:0;background:transparent;
   text-align:left;padding:4px 2px;border-radius:6px;cursor:pointer;font:inherit;color:inherit;}
   .wsc-peer:hover{background:var(--wsc-hover);}
-  .wsc-peer-dot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex-shrink:0;background:${T.dim};}
+  .wsc-peer-name-row{display:flex;align-items:center;gap:7px;}
+  .wsc-peer-dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${T.dim};}
   .wsc-peer-dot[data-on="true"]{background:${T.ok};box-shadow:0 0 0 3px rgba(52,199,89,.16);}
   .wsc-peer-body{display:flex;flex-direction:column;gap:1px;min-width:0;}
   .wsc-peer-name{font-size:12px;font-weight:500;}
@@ -787,7 +788,6 @@ window.__ModuleLoader__.load({
                     h(
                       'tr',
                       null,
-                      h('th', { className: 'wsc-rv-def' }, '状态'),
                       h('th', null, '节点'),
                       h('th', null, '最后活跃'),
                       h('th', null, '能力'),
@@ -802,21 +802,25 @@ window.__ModuleLoader__.load({
                         { key: item.name },
                         h(
                           'td',
-                          { className: 'wsc-rv-def' },
-                          h('span', { className: 'wsc-peer-dot', 'data-on': item.online === true ? 'true' : 'false' }),
-                        ),
-                        h(
-                          'td',
                           null,
                           h(
-                            'button',
-                            {
-                              type: 'button',
-                              className: 'wsc-peer-name-btn',
-                              title: '点击复制节点名',
-                              onClick: () => onCopy(item.name),
-                            },
-                            item.name,
+                            'div',
+                            { className: 'wsc-peer-name-row' },
+                            h('span', {
+                              className: 'wsc-peer-dot',
+                              'data-on': item.online === true ? 'true' : 'false',
+                              title: item.online === true ? '在线' : '离线',
+                            }),
+                            h(
+                              'button',
+                              {
+                                type: 'button',
+                                className: 'wsc-peer-name-btn',
+                                title: '点击复制节点名',
+                                onClick: () => onCopy(item.name),
+                              },
+                              item.name,
+                            ),
                           ),
                           item.cwd === '' ? null : h('div', { className: 'wsc-peer-sub' }, item.cwd),
                         ),
