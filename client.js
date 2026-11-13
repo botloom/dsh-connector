@@ -1588,6 +1588,11 @@ window.__ModuleLoader__.load({
       const [peerData, setPeerData] = useState(null)
       const searchRef = useRef(null)
 
+      const notify = useCallback((message) => {
+        setToast(message)
+        window.setTimeout(() => setToast((current) => (current === message ? null : current)), 2200)
+      }, [])
+
       const copyPeer = useCallback(
         (name) => {
           navigator.clipboard?.writeText(name).catch(() => {})
@@ -1596,10 +1601,6 @@ window.__ModuleLoader__.load({
         [notify],
       )
 
-      const notify = useCallback((message) => {
-        setToast(message)
-        window.setTimeout(() => setToast((current) => (current === message ? null : current)), 2200)
-      }, [])
 
       const load = useCallback(async () => {
         try {
