@@ -425,6 +425,8 @@ window.__ModuleLoader__.load({
   .wsc-routes{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
   .wsc-route{display:grid;grid-template-columns:22px 1.5fr 1fr 1.2fr 30px;gap:6px;align-items:center;}
   .wsc-route-default{display:flex;align-items:center;justify-content:center;}
+  .wsc-route-id{display:flex;flex-direction:column;gap:2px;min-width:0;}
+  .wsc-route-title{font-size:10.5px;color:${T.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .wsc-route input[type="radio"]{accent-color:${T.accent};width:14px;height:14px;cursor:pointer;}
   .wsc-routes-empty{font-size:11.5px;color:${T.dim};padding:2px 0 4px;}
   .wsc-addrow{border:1px dashed var(--wsc-hair);border-radius:8px;background:transparent;color:${T.dim};
@@ -718,12 +720,18 @@ window.__ModuleLoader__.load({
       const addRow = () => onChange([...rows, { id: '', label: '', purpose: '', default: rows.length === 0 }])
       const makeDefault = (index) => onChange(rows.map((row, i) => ({ ...row, default: i === index })))
 
+      const titleOf = (id) => {
+        const found = (sessions ?? []).find((item) => item.sessionId === id)
+        return found === undefined ? '' : found.title ?? ''
+      }
+
       const input = (row, index, key, placeholder, extra = {}) =>
         h('input', {
           className: 'wsc-input',
           value: row[key] ?? '',
           placeholder,
           list: key === 'id' ? 'wsconn-session-list' : undefined,
+          title: key === 'id' ? titleOf(row.id) : undefined,
           onChange: (event) => setRow(index, { [key]: event.target.value }),
           style: { maxWidth: 'none', ...(extra.style ?? {}) },
         })
@@ -751,7 +759,12 @@ window.__ModuleLoader__.load({
                   onChange: () => makeDefault(index),
                 }),
               ),
-              input(row, index, 'id', 'session-xxxx', { style: { fontFamily: 'ui-monospace, monospace' } }),
+              h(
+                'div',
+                { className: 'wsc-route-id' },
+                input(row, index, 'id', '选择或输入 sessionId', { style: { fontFamily: 'ui-monospace, monospace' } }),
+                h('div', { className: 'wsc-route-title' }, titleOf(row.id) || '—'),
+              ),
               input(row, index, 'label', '名称，如 闲聊'),
               input(row, index, 'purpose', '用途，如 兜底任务'),
               h(
@@ -767,7 +780,7 @@ window.__ModuleLoader__.load({
             h(
               'option',
               { key: item.sessionId, value: item.sessionId },
-              `${new Date(item.updatedAt).toLocaleString()}${item.blank ? ' · 空会话' : item.running ? ' · 运行中' : ''}`,
+              `${item.title || '(无标题)'} · ${new Date(item.updatedAt).toLocaleString()}${item.blank ? ' · 空会话' : item.running ? ' · 运行中' : ''} · ${item.sessionId.slice(0, 14)}…`,
             ),
           ),
         ),
