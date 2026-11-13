@@ -731,55 +731,81 @@ window.__ModuleLoader__.load({
         .filter((row) => row.id !== '')
     }
 
-    function PeerSection({ data, onCopy }) {
+    function PeerCard({ data, onCopy }) {
       if (data === null || data === undefined) return null
-      if (data.ok !== true) {
-        return h(
-          'div',
-          { className: 'wsc-peers' },
-          h('div', { className: 'wsc-peers-head' }, '跨机节点'),
-          h('div', { className: 'wsc-peers-error' }, data.error ?? '读取失败'),
-        )
-      }
-      const peers = Array.isArray(data.peers) ? data.peers : []
-      if (peers.length === 0) return null
+      const peers = data.ok === true && Array.isArray(data.peers) ? data.peers : []
       const online = peers.filter((item) => item.online === true).length
 
       return h(
         'div',
-        { className: 'wsc-peers' },
+        { className: 'wsc-card' },
         h(
           'div',
-          { className: 'wsc-peers-head' },
-          h('span', null, '跨机节点'),
-          h('span', { className: 'wsc-peers-count' }, `${online}/${peers.length} 在线`),
+          { className: 'wsc-card-head' },
+          h(Glyph, { name: 'layers', size: 14, color: T.dim }),
+          h('span', { className: 'wsc-card-title' }, '跨机节点'),
+          h('span', { className: 'wsc-card-note' }, data.ok !== true ? (data.error ?? '读取失败') : `${online}/${peers.length} 在线`),
         ),
-        peers.map((item) =>
-          h(
-            'button',
-            {
-              key: item.name,
-              type: 'button',
-              className: 'wsc-peer',
-              title: '点击复制节点名',
-              onClick: () => onCopy(item.name),
-            },
-            h('span', { className: 'wsc-peer-dot', 'data-on': item.online === true ? 'true' : 'false' }),
-            h(
-              'span',
-              { className: 'wsc-peer-body' },
-              h('span', { className: 'wsc-peer-name' }, item.name),
-              item.cwd === '' ? null : h('span', { className: 'wsc-peer-cwd' }, item.cwd),
-              Array.isArray(item.capabilities) && item.capabilities.length > 0
-                ? h(
-                    'span',
-                    { className: 'wsc-peer-caps' },
-                    item.capabilities.slice(0, 3).join(' · '),
-                    item.capabilities.length > 3 ? ' …' : '',
-                  )
-                : null,
-            ),
-          ),
+        h(
+          'div',
+          { className: 'wsc-card-body' },
+          data.ok !== true
+            ? null
+            : peers.length === 0
+              ? h('div', { className: 'wsc-kv-val' }, '信箱里还没有其他节点心跳')
+              : h(
+                  'table',
+                  { className: 'wsc-rv' },
+                  h(
+                    'thead',
+                    null,
+                    h(
+                      'tr',
+                      null,
+                      h('th', { className: 'wsc-rv-def' }, '状态'),
+                      h('th', null, '节点'),
+                      h('th', null, '工作目录'),
+                      h('th', null, '能力'),
+                    ),
+                  ),
+                  h(
+                    'tbody',
+                    null,
+                    peers.map((item) =>
+                      h(
+                        'tr',
+                        { key: item.name },
+                        h(
+                          'td',
+                          { className: 'wsc-rv-def' },
+                          h('span', { className: 'wsc-peer-dot', 'data-on': item.online === true ? 'true' : 'false' }),
+                        ),
+                        h(
+                          'td',
+                          null,
+                          h(
+                            'button',
+                            {
+                              type: 'button',
+                              className: 'wsc-peer-name-btn',
+                              title: '点击复制节点名',
+                              onClick: () => onCopy(item.name),
+                            },
+                            item.name,
+                          ),
+                        ),
+                        h('td', { className: 'wsc-rv-id' }, item.cwd === '' ? '—' : item.cwd),
+                        h(
+                          'td',
+                          { className: 'wsc-rv-id' },
+                          Array.isArray(item.capabilities) && item.capabilities.length > 0
+                            ? `${item.capabilities.slice(0, 3).join(' · ')}${item.capabilities.length > 3 ? ' …' : ''}`
+                            : '—',
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
         ),
       )
     }
@@ -1034,7 +1060,7 @@ window.__ModuleLoader__.load({
     /* 连接详情（纯管理，不执行）                                            */
     /* ------------------------------------------------------------------ */
 
-    function Detail({ conn, manifest, status, onToast, onTest, onEdit, onRemove, onToggle }) {
+    function Detail({ conn, manifest, status, peers, onCopyPeer, onToast, onTest, onEdit, onRemove, onToggle }) {
       const cat = categoryOf(manifest)
       const [testing, setTesting] = useState(false)
       const state = status?.[conn.name]
@@ -1198,6 +1224,13 @@ window.__ModuleLoader__.load({
             ),
           ),
         ),
+
+        conn.kind === 'dsh'
+          ? h(PeerCard, {
+              data: peers,
+              onCopy: onCopyPeer,
+            })
+          : null,
       )
     }
 
@@ -1555,6 +1588,14 @@ window.__ModuleLoader__.load({
       const [peerData, setPeerData] = useState(null)
       const searchRef = useRef(null)
 
+      const copyPeer = useCallback(
+        (name) => {
+          navigator.clipboard?.writeText(name).catch(() => {})
+          notify(`已复制节点名：${name}，输入 /peer ${name} …`)
+        },
+        [notify],
+      )
+
       const notify = useCallback((message) => {
         setToast(message)
         window.setTimeout(() => setToast((current) => (current === message ? null : current)), 2200)
@@ -1764,13 +1805,6 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'wsc-side-list' },
-          h(PeerSection, {
-            data: peerData,
-            onCopy: (name) => {
-              navigator.clipboard?.writeText(name).catch(() => {})
-              notify(`已复制节点名：${name}，输入 /peer ${name} …`)
-            },
-          }),
           loading
             ? [0, 1, 2, 3].map((index) => h('div', { key: index, className: 'wsc-skel' }))
             : grouped.map((group) =>
@@ -1850,7 +1884,9 @@ window.__ModuleLoader__.load({
           conn: current,
           manifest,
           status,
+          peers: peerData,
           onToast: notify,
+          onCopyPeer: copyPeer,
           onTest: testOne,
           onEdit: (conn) => setEditing({ conn }),
           onRemove: requestRemove,
