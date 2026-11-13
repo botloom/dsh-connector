@@ -337,6 +337,10 @@ window.__ModuleLoader__.load({
   .wsc-peer-dot[data-on="true"]{background:${T.ok};box-shadow:0 0 0 3px rgba(52,199,89,.16);}
   .wsc-peer-body{display:flex;flex-direction:column;gap:1px;min-width:0;}
   .wsc-peer-name{font-size:12px;font-weight:500;}
+  .wsc-peer-name-btn{border:0;background:transparent;padding:0;font:inherit;font-size:12px;
+  font-weight:500;color:inherit;cursor:pointer;text-align:left;}
+  .wsc-peer-name-btn:hover{color:${T.accent};}
+  .wsc-peer-sub{font-size:10.5px;color:${T.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .wsc-peer-cwd,.wsc-peer-caps{font-size:10.5px;color:${T.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .wsc-group{font-size:11px;font-weight:600;letter-spacing:.045em;
         color:color-mix(in srgb,${T.dim} 88%,transparent);padding:14px 8px 5px;text-transform:uppercase;}
@@ -733,8 +737,25 @@ window.__ModuleLoader__.load({
 
     function PeerCard({ data, onCopy }) {
       if (data === null || data === undefined) return null
-      const peers = data.ok === true && Array.isArray(data.peers) ? data.peers : []
+      const raw = data.ok === true && Array.isArray(data.peers) ? data.peers : []
+      // 在线的排前面，其余按最后活跃倒序；离线的也照常显示
+      const peers = [...raw].sort((a, b) => {
+        if ((a.online === true) !== (b.online === true)) return a.online === true ? -1 : 1
+        return (b.lastSeen ?? 0) - (a.lastSeen ?? 0)
+      })
       const online = peers.filter((item) => item.online === true).length
+
+      const ago = (stamp) => {
+        const ms = Date.now() - Number(stamp ?? 0)
+        if (!Number.isFinite(ms) || ms < 0) return '—'
+        const minutes = Math.floor(ms / 60000)
+        if (minutes < 1) return '刚刚'
+        if (minutes < 60) return `${minutes} 分钟前`
+        const hours = Math.floor(minutes / 60)
+        if (hours < 24) return `${hours} 小时前`
+        const days = Math.floor(hours / 24)
+        return `${days} 天前`
+      }
 
       return h(
         'div',
@@ -744,7 +765,11 @@ window.__ModuleLoader__.load({
           { className: 'wsc-card-head' },
           h(Glyph, { name: 'layers', size: 14, color: T.dim }),
           h('span', { className: 'wsc-card-title' }, '跨机节点'),
-          h('span', { className: 'wsc-card-note' }, data.ok !== true ? (data.error ?? '读取失败') : `${online}/${peers.length} 在线`),
+          h(
+            'span',
+            { className: 'wsc-card-note' },
+            data.ok !== true ? (data.error ?? '读取失败') : `${peers.length} 个 · ${online} 在线`,
+          ),
         ),
         h(
           'div',
@@ -752,7 +777,7 @@ window.__ModuleLoader__.load({
           data.ok !== true
             ? null
             : peers.length === 0
-              ? h('div', { className: 'wsc-kv-val' }, '信箱里还没有其他节点心跳')
+              ? h('div', { className: 'wsc-kv-val' }, '信箱里还没有任何节点心跳')
               : h(
                   'table',
                   { className: 'wsc-rv' },
@@ -764,7 +789,7 @@ window.__ModuleLoader__.load({
                       null,
                       h('th', { className: 'wsc-rv-def' }, '状态'),
                       h('th', null, '节点'),
-                      h('th', null, '工作目录'),
+                      h('th', null, '最后活跃'),
                       h('th', null, '能力'),
                     ),
                   ),
@@ -793,8 +818,9 @@ window.__ModuleLoader__.load({
                             },
                             item.name,
                           ),
+                          item.cwd === '' ? null : h('div', { className: 'wsc-peer-sub' }, item.cwd),
                         ),
-                        h('td', { className: 'wsc-rv-id' }, item.cwd === '' ? '—' : item.cwd),
+                        h('td', { className: 'wsc-rv-id' }, ago(item.lastSeen)),
                         h(
                           'td',
                           { className: 'wsc-rv-id' },
