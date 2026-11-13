@@ -720,21 +720,30 @@ window.__ModuleLoader__.load({
       const addRow = () => onChange([...rows, { id: '', label: '', purpose: '', default: rows.length === 0 }])
       const makeDefault = (index) => onChange(rows.map((row, i) => ({ ...row, default: i === index })))
 
+      const known = new Set((sessions ?? []).map((item) => item.sessionId))
       const titleOf = (id) => {
         const found = (sessions ?? []).find((item) => item.sessionId === id)
         return found === undefined ? '' : found.title ?? ''
       }
 
-      const input = (row, index, key, placeholder, extra = {}) =>
-        h('input', {
-          className: 'wsc-input',
-          value: row[key] ?? '',
-          placeholder,
-          list: key === 'id' ? 'wsconn-session-list' : undefined,
-          title: key === 'id' ? titleOf(row.id) : undefined,
-          onChange: (event) => setRow(index, { [key]: event.target.value }),
-          style: { maxWidth: 'none', ...(extra.style ?? {}) },
-        })
+      const byCwd = new Map()
+      for (const item of sessions ?? []) {
+        const key = item.cwd === undefined || item.cwd === '' ? '(未记录工作区)' : item.cwd
+        if (!byCwd.has(key)) byCwd.set(key, [])
+        byCwd.get(key).push(item)
+      }
+      const groups = [...byCwd.entries()]
+        .map(([cwd, items]) => ({
+          cwd,
+          label: cwd === '(未记录工作区)' ? cwd : cwd.split(/[\\/]/).filter(Boolean).pop() || cwd,
+          items: [...items].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)),
+        }))
+        .sort((a, b) => b.items.length - a.items.length)
+
+      const stamp = (item) =>
+        `${new Date(item.updatedAt).toLocaleString()}${
+          item.blank === true ? ' · 空' : item.running === true ? ' · 运行中' : ''
+        }`
 
       return h(
         'div',
@@ -743,10 +752,11 @@ window.__ModuleLoader__.load({
           'div',
           { className: 'wsc-routes' },
           rows.length === 0
-            ? h('div', { className: 'wsc-routes-empty' }, '还没有会话——下面点「添加会话」，填本机的 sessionId')
+            ? h('div', { className: 'wsc-routes-empty' }, '还没有会话——点下面「添加会话」，按工作区分组挑一个')
             : null,
-          rows.map((row, index) =>
-            h(
+          rows.map((row, index) => {
+            const custom = row.custom === true || (row.id !== '' && !known.has(row.id))
+            return h(
               'div',
               { key: index, className: 'wsc-route' },
               h(
@@ -762,33 +772,69 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { className: 'wsc-route-id' },
-                input(row, index, 'id', '选择或输入 sessionId', { style: { fontFamily: 'ui-monospace, monospace' } }),
-                h('div', { className: 'wsc-route-title' }, titleOf(row.id) || '—'),
+                custom
+                  ? h('input', {
+                      className: 'wsc-input',
+                      value: row.id ?? '',
+                      placeholder: '手填 sessionId',
+                      style: { fontFamily: 'ui-monospace, monospace', maxWidth: 'none' },
+                      onChange: (event) => setRow(index, { id: event.target.value }),
+                    })
+                  : h(
+                      'select',
+                      {
+                        className: 'wsc-select wsc-route-select',
+                        value: row.id ?? '',
+                        onChange: (event) => {
+                          const next = event.target.value
+                          if (next === '__custom__') {
+                            setRow(index, { custom: true })
+                            return
+                          }
+                          setRow(index, { custom: false, id: next })
+                        },
+                      },
+                      h('option', { value: '' }, '选择会话…'),
+                      groups.map((group) =>
+                        h(
+                          'optgroup',
+                          { key: group.cwd, label: `${group.label}（${group.items.length}）` },
+                          group.items.map((item) =>
+                            h(
+                              'option',
+                              { key: item.sessionId, value: item.sessionId },
+                              `${item.title || '(无标题)'} · ${stamp(item)}`,
+                            ),
+                          ),
+                        ),
+                      ),
+                      h('option', { value: '__custom__' }, '手填 sessionId…'),
+                    ),
+                h('div', { className: 'wsc-route-title' }, titleOf(row.id) || (custom ? '手填' : '—')),
               ),
-              input(row, index, 'label', '名称，如 闲聊'),
-              input(row, index, 'purpose', '用途，如 兜底任务'),
+              h('input', {
+                className: 'wsc-input',
+                value: row.label ?? '',
+                placeholder: '名称，如 闲聊',
+                onChange: (event) => setRow(index, { label: event.target.value }),
+                style: { maxWidth: 'none' },
+              }),
+              h('input', {
+                className: 'wsc-input',
+                value: row.purpose ?? '',
+                placeholder: '用途，如 兜底任务',
+                onChange: (event) => setRow(index, { purpose: event.target.value }),
+                style: { maxWidth: 'none' },
+              }),
               h(
                 'button',
                 { type: 'button', className: 'wsc-iconbtn', title: '删除这一行', onClick: () => removeRow(index) },
                 h(Glyph, { name: 'trash', size: 13 }),
               ),
-            ),
-          ),
+            )
+          }),
         ),
-        h('datalist', { id: 'wsconn-session-list' },
-          (sessions ?? []).map((item) =>
-            h(
-              'option',
-              { key: item.sessionId, value: item.sessionId },
-              `${item.title || '(无标题)'} · ${new Date(item.updatedAt).toLocaleString()}${item.blank ? ' · 空会话' : item.running ? ' · 运行中' : ''} · ${item.sessionId.slice(0, 14)}…`,
-            ),
-          ),
-        ),
-        h(
-          'button',
-          { type: 'button', className: 'wsc-addrow', onClick: addRow },
-          '＋ 添加会话',
-        ),
+        h('button', { type: 'button', className: 'wsc-addrow', onClick: addRow }, '＋ 添加会话'),
       )
     }
 
