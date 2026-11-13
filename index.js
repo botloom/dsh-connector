@@ -24,8 +24,11 @@ import { driverManifests, getDriver, listDrivers, loadExternalDrivers } from './
 import { API_PREFIX, createApiHandler } from './lib/api.js'
 import { applyImport, editConfig, editConnection, exportPayload } from './lib/store.js'
 import {
+  acceptTask,
   cancelTask,
   claimTask,
+  listInbox,
+  rejectTask,
   ensureSchema,
   listTasks,
   findByCapability,
@@ -545,6 +548,11 @@ export async function apply(ctx, config = {}) {
           waitMs: 120000,
           routes: parseRoutes(dshConnection.routes),
           capabilities: capabilityList(),
+          autoRun: dshConnection.autoRun === true,
+          trusted: `${dshConnection.trusted ?? ''}`
+            .split(/[\s,，]+/)
+            .map((item) => item.trim())
+            .filter((item) => item !== ''),
         })
   const peerBase =
 
@@ -642,7 +650,7 @@ export async function apply(ctx, config = {}) {
         sessionId: typeof args?.sessionId === 'string' ? args.sessionId.trim() : '',
         message: text,
       })
-      return { text: `已投递给 ${to}，taskId=${taskId}\n用 peer_wait 等结果（对方要开着 DSH，轮询间隔 ${peer.pollMs}ms）。` }
+      return { text: `已投递给 ${to}，taskId=${taskId}\n对方默认要先在弹窗/收件箱里点「执行」才会真的跑；对方按 allowAutoRun 配置我也可能直接执行。\n之后可用 peer_wait 取结果（对方要开着 DSH，轮询间隔 ${peer.pollMs}ms）。` }
     },
     presentCall: (args) => present('给同事派活', 'edit', args?.to),
   })
@@ -770,7 +778,7 @@ export async function apply(ctx, config = {}) {
         })
         lines.push(`${target}: ${id}`)
       }
-      return { text: `已广播给 ${targets.length} 个节点：\n${lines.join('\n')}` }
+      return { text: `已广播给 ${targets.length} 个节点（各自需确认后执行）：\n${lines.join('\n')}` }
     },
     presentCall: () => present('广播跨机任务', 'send'),
   })
@@ -983,9 +991,32 @@ export async function apply(ctx, config = {}) {
     }
   }
 
+  const peerOps = async (op, body) => {
+    try {
+      const { peer, connection } = requirePeer()
+      const taskId = typeof body?.taskId === 'string' ? body.taskId.trim() : ''
+      if (op === 'inbox') {
+        const tasks = await listInbox(connection, peer.name)
+        return { ok: true, tasks }
+      }
+      if (taskId === '') return { ok: false, error: 'taskId 不能为空' }
+      if (op === 'accept') {
+        const result = await acceptTask(connection, taskId, peer.name)
+        return result.ok === true ? { ok: true, task: result.task } : { ok: false, error: result.reason }
+      }
+      if (op === 'reject') {
+        const result = await rejectTask(connection, taskId, peer.name)
+        return result.ok === true ? { ok: true, task: result.task } : { ok: false, error: result.reason }
+      }
+      return { ok: false, error: `未知操作 ${op}` }
+    } catch (error) {
+      return { ok: false, error: `${error?.message ?? error}` }
+    }
+  }
+
   const registerApi = (server) => {
     if (server === undefined || server === null) return
-    const handler = createApiHandler(ctx, state, { peerSnapshot })
+    const handler = createApiHandler(ctx, state, { peerSnapshot, peerOps })
     ctx.effect(() => server.register({ kind: 'prefix', path: API_PREFIX, handler }))
   }
 

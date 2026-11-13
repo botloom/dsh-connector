@@ -285,6 +285,13 @@ window.__ModuleLoader__.load({
   .wsc-peer-close:hover{color:${T.text};}
   .wsc-peer-line{margin-top:6px;word-break:break-all;}
   .wsc-peer-tag{font-weight:600;}
+  .wsc-peer-actions{display:flex;gap:6px;margin-top:6px;}
+  .wsc-peer-btn{border:1px solid var(--wsc-hair);background:transparent;color:${T.text};font:inherit;
+  font-size:11.5px;line-height:1;padding:5px 10px;border-radius:7px;cursor:pointer;}
+  .wsc-peer-btn:hover{border-color:${T.border2};}
+  .wsc-peer-btn[data-tone="ok"]{border-color:${T.ok};color:${T.ok};}
+  .wsc-peer-btn[data-tone="ok"]:hover{background:rgba(52,199,89,.1);}
+  .wsc-peer-btn:disabled{opacity:.55;cursor:default;}
   @keyframes wsc-peer-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
       @keyframes wsc-rise{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
@@ -2100,17 +2107,68 @@ window.__ModuleLoader__.load({
       const [items, setItems] = useState([])
       const [hidden, setHidden] = useState(false)
       const [stamp, setStamp] = useState('')
+      const [busy, setBusy] = useState(null)
+
+      const labelOf = (kind) =>
+        kind === 'inbox' ? '待确认' : kind === 'received' ? '收到' : kind === 'done' ? '完成' : '失败'
+      const colorOf = (kind) =>
+        kind === 'done' ? T.ok : kind === 'failed' ? T.bad : kind === 'inbox' ? T.warn : T.accent
+
+      const remove = (id) => setItems((prev) => prev.filter((item) => item.id !== id))
+
+      const decide = async (item, action) => {
+        setBusy(item.taskId)
+        try {
+          await post(`/peer/${action}`, { taskId: item.taskId })
+          remove(item.id)
+        } catch {
+          /* 失败就留着，下次再点 */
+        } finally {
+          setBusy(null)
+        }
+      }
 
       useEffect(() => {
         let alive = true
         let cursor = 0
         let hideTimer = null
+
+        // 打开页面时先把「待确认」的收件箱拉回来，刷新不丢
+        const loadInbox = async () => {
+          try {
+            const data = await request('/peer/inbox')
+            if (!alive || !Array.isArray(data?.tasks) || data.tasks.length === 0) return
+            setItems((prev) => {
+              const known = new Set(prev.map((item) => item.taskId))
+              const fresh = data.tasks
+                .filter((task) => !known.has(task.id))
+                .map((task) => ({
+                  id: `inbox-${task.id}`,
+                  taskId: task.id,
+                  kind: 'inbox',
+                  from: task.from,
+                  text: task.message,
+                }))
+              return [...prev, ...fresh].slice(-4)
+            })
+          } catch {
+            /* 忽略 */
+          }
+        }
+
         const tick = async () => {
           try {
             const data = await request(`/peer/events?since=${cursor}`)
             if (!alive || !Array.isArray(data?.events) || data.events.length === 0) return
             cursor = typeof data.cursor === 'number' ? data.cursor : cursor
-            setItems((prev) => [...prev, ...data.events].slice(-4))
+            const fresh = data.events.map((event) => ({
+              id: `event-${event.id}`,
+              taskId: event.taskId ?? event.task?.id,
+              kind: event.kind,
+              from: event.from,
+              text: event.text,
+            }))
+            setItems((prev) => [...prev, ...fresh].slice(-4))
             setHidden(false)
             setStamp(new Date().toTimeString().slice(0, 5))
             if (hideTimer) clearTimeout(hideTimer)
@@ -2121,6 +2179,8 @@ window.__ModuleLoader__.load({
             /* 插件没起来时静默 */
           }
         }
+
+        void loadInbox()
         const timer = setInterval(tick, 5000)
         tick()
         return () => {
@@ -2132,9 +2192,6 @@ window.__ModuleLoader__.load({
 
       if (items.length === 0 || hidden) return null
 
-      const labelOf = (kind) => (kind === 'received' ? '收到' : kind === 'done' ? '完成' : '失败')
-      const colorOf = (kind) => (kind === 'done' ? T.ok : kind === 'failed' ? T.bad : T.accent)
-
       return h(
         'div',
         { className: 'wsc-peer-card' },
@@ -2143,11 +2200,7 @@ window.__ModuleLoader__.load({
           { className: 'wsc-peer-head' },
           h('span', { className: 'wsc-peer-title' }, '连接器 · 跨机任务'),
           h('span', { className: 'wsc-peer-time' }, stamp),
-          h(
-            'button',
-            { type: 'button', className: 'wsc-peer-close', title: '关闭', onClick: () => setHidden(true) },
-            '×',
-          ),
+          h('button', { type: 'button', className: 'wsc-peer-close', title: '关闭', onClick: () => setHidden(true) }, '×'),
         ),
         items.map((item) =>
           h(
@@ -2155,6 +2208,33 @@ window.__ModuleLoader__.load({
             { key: item.id, className: 'wsc-peer-line' },
             h('span', { className: 'wsc-peer-tag', style: { color: colorOf(item.kind) } }, `[${labelOf(item.kind)}]`),
             ` ${item.from} · ${item.text || item.sessionId || ''}`,
+            item.kind === 'inbox' && item.taskId
+              ? h(
+                  'div',
+                  { className: 'wsc-peer-actions' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'wsc-peer-btn',
+                      'data-tone': 'ok',
+                      disabled: busy === item.taskId,
+                      onClick: () => decide(item, 'accept'),
+                    },
+                    busy === item.taskId ? '…' : '执行',
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'wsc-peer-btn',
+                      disabled: busy === item.taskId,
+                      onClick: () => decide(item, 'reject'),
+                    },
+                    '忽略',
+                  ),
+                )
+              : null,
           ),
         ),
       )
