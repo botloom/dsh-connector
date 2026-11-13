@@ -28,7 +28,9 @@ import {
   claimTask,
   ensureSchema,
   listTasks,
+  findByCapability,
   parseRoutes,
+  retryTask,
   finishTask,
   heartbeat,
   listPeers,
@@ -505,6 +507,27 @@ export async function apply(ctx, config = {}) {
     presentCall: () => present('导入连接配置', 'edit'),
   })
   // ---------------- 跨 DSH 信箱（可选，配置了 config.peer 才启用） ----------------
+  const hostOf = (value) => {
+    if (typeof value !== 'string' || value === '') return ''
+    try {
+      return new URL(value).hostname
+    } catch {
+      return ''
+    }
+  }
+
+  // 能力 = 本机能替别人做的事：按连接名、类型、目标主机各报一条
+  const capabilityList = () => {
+    const caps = new Set()
+    for (const conn of state.connections) {
+      if (conn.disabled === true || conn.kind === 'dsh') continue
+      caps.add(`${conn.kind}:${conn.name}`)
+      const host = typeof conn.host === 'string' && conn.host !== '' ? conn.host : hostOf(conn.baseUrl)
+      if (host !== '') caps.add(`${conn.kind}:${host}`)
+    }
+    return [...caps]
+  }
+
   const dshConnection = state.connections.find((item) => item.kind === 'dsh' && item.disabled !== true)
   const peer =
     peerConfig(config) ??
@@ -521,6 +544,7 @@ export async function apply(ctx, config = {}) {
           pollMs: Math.max(1000, Math.min(60000, Number(dshConnection.pollMs) || 3000)),
           waitMs: 120000,
           routes: parseRoutes(dshConnection.routes),
+          capabilities: capabilityList(),
         })
   const peerBase =
 
@@ -583,7 +607,13 @@ export async function apply(ctx, config = {}) {
       const peers = await listPeers(connection)
       if (peers.length === 0) return { text: '信箱里还没有任何节点心跳。' }
       const lines = peers.map(
-        (item) => `${item.online ? '在线' : '离线'}  ${item.name}${item.cwd ? ` · ${item.cwd}` : ''} · ${new Date(item.lastSeen).toLocaleString()}`,
+        (item) => {
+          const caps =
+            Array.isArray(item.capabilities) && item.capabilities.length > 0
+              ? ` · 能力：${item.capabilities.slice(0, 6).join('、')}${item.capabilities.length > 6 ? '…' : ''}`
+              : ''
+          return `${item.online ? '在线' : '离线'}  ${item.name}${item.cwd ? ` · ${item.cwd}` : ''} · ${new Date(item.lastSeen).toLocaleString()}${caps}`
+        },
       )
       return { text: lines.join('\n') }
     },
@@ -655,6 +685,94 @@ export async function apply(ctx, config = {}) {
       return { text: JSON.stringify({ ...info, problems }, null, 2) }
     },
     presentCall: () => present('诊断信箱', 'read'),
+  })
+
+  ctx.tools.register({
+    name: 'peer_find',
+    description: '按能力找节点：谁有某台机器的 SSH、某个库的连接、Jenkins 之类。need 写能力片段，如 "ssh:172.16.22.140" 或 "jenkins"。',
+    parameters: {
+      need: { type: 'string', required: true, description: '能力片段，不区分大小写' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const { connection } = requirePeer()
+      const need = typeof args?.need === 'string' ? args.need.trim() : ''
+      if (need === '') throw new Error('need 不能为空')
+      const hits = await findByCapability(connection, need)
+      if (hits.length === 0) return { text: `没有节点声明匹配「${need}」的能力。` }
+      return {
+        text: hits
+          .map((hit) => {
+            const flags = []
+            if (hit.peer.online !== true) flags.push('离线')
+            if (hit.peer.name !== '') flags.push(hit.peer.name)
+            return `${hit.peer.name}${hit.peer.online === true ? '' : '（离线）'} → ${hit.matched.join('、')}`
+          })
+          .join('\n'),
+      }
+    },
+    presentCall: () => present('寻找能干这事的节点', 'search'),
+  })
+
+  ctx.tools.register({
+    name: 'peer_retry',
+    description: '把已经结束（done/error/cancelled）的跨机任务重置回待投递，让对方重新执行一次。',
+    parameters: {
+      taskId: { type: 'string', required: true, description: 'peer_send 返回的 taskId' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const { peer, connection } = requirePeer()
+      const taskId = typeof args?.taskId === 'string' ? args.taskId.trim() : ''
+      if (taskId === '') throw new Error('taskId 不能为空')
+      const result = await retryTask(connection, taskId, peer.name)
+      if (result.ok !== true) {
+        const reason =
+          result.reason === 'not-found'
+            ? '没有这个任务'
+            : result.reason === 'not-owner'
+              ? '只能重试自己发起的任务'
+              : '任务还在跑，不能重试'
+        return { text: `重试失败：${reason}` }
+      }
+      return { text: `已重置为待投递（第 ${result.task.attempts + 1} 次尝试），对方下次轮询会重新执行。` }
+    },
+    presentCall: (args) => present('重试跨机任务', 'edit', args?.taskId),
+  })
+
+  ctx.tools.register({
+    name: 'peer_broadcast',
+    description: '把同一条任务发给多个节点（比如让所有人刷新缓存），返回每个节点的 taskId。',
+    parameters: {
+      to: {
+        type: 'array',
+        items: { type: 'string' },
+        required: true,
+        description: '节点名列表',
+      },
+      text: { type: 'string', required: true },
+      sessionId: { type: 'string', description: '投递到哪个会话（省略则用对方的默认会话）' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const { peer, connection } = requirePeer()
+      const targets = Array.isArray(args?.to) ? args.to.map((item) => `${item}`.trim()).filter((item) => item !== '') : []
+      const message = typeof args?.text === 'string' ? args.text : ''
+      if (targets.length === 0) throw new Error('to 至少给一个节点名')
+      if (message.trim() === '') throw new Error('text 不能为空')
+      const lines = []
+      for (const target of targets) {
+        const id = await sendTask(connection, {
+          from: peer.name,
+          to: target,
+          sessionId: typeof args?.sessionId === 'string' ? args.sessionId : undefined,
+          message,
+        })
+        lines.push(`${target}: ${id}`)
+      }
+      return { text: `已广播给 ${targets.length} 个节点：\n${lines.join('\n')}` }
+    },
+    presentCall: () => present('广播跨机任务', 'send'),
   })
 
   ctx.tools.register({
