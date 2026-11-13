@@ -991,6 +991,28 @@ window.__ModuleLoader__.load({
           continue
         }
         if (field.name === 'allowWrite') continue
+        if (field.type === 'routes') {
+          const list = Array.isArray(value) ? value : []
+          if (list.length === 0) {
+            rows.push([field.label ?? field.name, '未配置（不接收任何任务）'])
+            continue
+          }
+          rows.push([
+            field.label ?? field.name,
+            h(
+              'div',
+              { style: { display: 'flex', flexDirection: 'column', gap: 3 } },
+              list.map((route, index) =>
+                h(
+                  'div',
+                  { key: index },
+                  `${route.default === true ? '★ ' : ''}${route.label || route.id}${route.purpose ? ` · ${route.purpose}` : ''}`,
+                ),
+              ),
+            ),
+          ])
+          continue
+        }
         rows.push([field.label ?? field.name, `${value}`])
       }
       if (manifest?.category === 'database') {
