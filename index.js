@@ -24,8 +24,11 @@ import { driverManifests, getDriver, listDrivers, loadExternalDrivers } from './
 import { API_PREFIX, createApiHandler } from './lib/api.js'
 import { applyImport, editConfig, editConnection, exportPayload } from './lib/store.js'
 import {
+  cancelTask,
   claimTask,
   ensureSchema,
+  listTasks,
+  parseRoutes,
   finishTask,
   heartbeat,
   listPeers,
@@ -517,6 +520,7 @@ export async function apply(ctx, config = {}) {
           database: typeof dshConnection.database === 'string' ? dshConnection.database : undefined,
           pollMs: Math.max(1000, Math.min(60000, Number(dshConnection.pollMs) || 3000)),
           waitMs: 120000,
+          routes: parseRoutes(dshConnection.routes),
         })
   const peerBase =
 
@@ -651,6 +655,70 @@ export async function apply(ctx, config = {}) {
       return { text: JSON.stringify({ ...info, problems }, null, 2) }
     },
     presentCall: () => present('诊断信箱', 'read'),
+  })
+
+  ctx.tools.register({
+    name: 'peer_tasks',
+    description: '列出跨机任务（默认我发出的和收到的都列），可按方向 sent/received 和状态 pending/claimed/running/done/error/cancelled 过滤。',
+    parameters: {
+      direction: { type: 'string', enum: ['all', 'sent', 'received'], description: '默认 all' },
+      status: { type: 'string', description: '按状态过滤' },
+      limit: { type: 'number', description: '默认 20，最多 100' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const { peer, connection } = requirePeer()
+      const tasks = await listTasks(connection, {
+        peer: peer.name,
+        direction: args?.direction === 'sent' ? 'sent' : args?.direction === 'received' ? 'received' : 'all',
+        status: typeof args?.status === 'string' && args.status !== '' ? args.status : undefined,
+        limit: args?.limit,
+      })
+      if (tasks.length === 0) return { text: '没有符合条件的任务。' }
+      const lines = tasks.map((task) => {
+        const outgoing = task.from === peer.name
+        const other = outgoing ? task.to : task.from
+        const label =
+          task.sessionLabel === ''
+            ? task.sessionId || '(默认会话)'
+            : `${task.sessionLabel}（${task.sessionId.slice(0, 12)}…）`
+        const tail =
+          task.status === 'done'
+            ? `回复：${(task.reply ?? '').slice(0, 60)}`
+            : task.status === 'error'
+              ? `错误：${(task.error ?? '').slice(0, 60)}`
+              : task.progress || ''
+        return `${task.status.padEnd(8)} ${outgoing ? '→' : '←'} ${other} · ${label} · ${task.message.slice(0, 40)}${tail === '' ? '' : ` · ${tail}`}\n    id=${task.id}`
+      })
+      return { text: `共 ${tasks.length} 条：\n${lines.join('\n')}` }
+    },
+    presentCall: () => present('查看跨机任务', 'read'),
+  })
+
+  ctx.tools.register({
+    name: 'peer_cancel',
+    description: '取消一个还没跑完的跨机任务：pending 直接置为 cancelled，已领取的会在投递前放弃。',
+    parameters: {
+      taskId: { type: 'string', required: true, description: 'peer_send 返回的 taskId' },
+    },
+    output: TEXT_OUTPUT,
+    async execute(args) {
+      const { peer, connection } = requirePeer()
+      const taskId = typeof args?.taskId === 'string' ? args.taskId.trim() : ''
+      if (taskId === '') throw new Error('taskId 不能为空')
+      const result = await cancelTask(connection, taskId, peer.name)
+      if (result.ok !== true) {
+        const reason =
+          result.reason === 'not-found'
+            ? '没有这个任务'
+            : result.reason === 'not-owner'
+              ? '只能取消自己发起的任务'
+              : '任务已经结束了'
+        return { text: `取消失败：${reason}` }
+      }
+      return { text: result.pending === true ? '已请求取消，对方下次轮询时会放弃。' : '已取消。' }
+    },
+    presentCall: (args) => present('取消跨机任务', 'edit', args?.taskId),
   })
 
   ctx.tools.register({

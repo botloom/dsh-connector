@@ -274,6 +274,18 @@ async function main() {
     { action: 'update', name: 'n', connection: { timeoutMs: 5000 } },
   )
   check('update 不带 notes 时保留', keptNotes.config.connections[0].notes === '旧的说明')
+  const { parseRoutes } = await load('lib/peer.js')
+  const routes = parseRoutes('# 注释行\n*session-a | 闲聊 | 兜底\nsession-b | 技能 | 技能需求\n\nsession-c')
+  check(
+    'parseRoutes 解析默认/标签/注释',
+    routes.length === 3 &&
+      routes[0].default === true &&
+      routes[0].label === '闲聊' &&
+      routes[1].id === 'session-b' &&
+      routes[2].label === '',
+    JSON.stringify(routes),
+  )
+  check('parseRoutes 空输入', parseRoutes('').length === 0 && parseRoutes(undefined).length === 0)
   check('store toggle 禁用', toggled.config.connections[0].disabled === true && /已禁用/.test(toggled.message))
   const toggledBack = applyConnectionChange(toggled.config, { action: 'toggle', name: 'db', disabled: false })
   check('store toggle 重新启用', toggledBack.config.connections[0].disabled === false)

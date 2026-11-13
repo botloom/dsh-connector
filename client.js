@@ -1180,6 +1180,19 @@ window.__ModuleLoader__.load({
                       }),
                     )
                   }
+                  if (field.type === 'textarea') {
+                    return h(
+                      Field,
+                      { key: field.name, label: field.label ?? field.name, hint, required: field.required },
+                      h('textarea', {
+                        className: 'wsc-input wsc-textarea',
+                        rows: 4,
+                        value: value ?? '',
+                        placeholder: field.placeholder ?? '',
+                        onChange: (event) => setValue(field.name, event.target.value),
+                      }),
+                    )
+                  }
                   if (Array.isArray(field.options) && field.options.length > 0) {
                     return h(
                       Field,
