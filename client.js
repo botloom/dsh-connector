@@ -425,7 +425,6 @@ window.__ModuleLoader__.load({
   .wsc-routes{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;}
   .wsc-route{display:grid;grid-template-columns:22px 1.5fr 1fr 1.2fr 30px;gap:6px;align-items:center;}
   .wsc-route-default{display:flex;align-items:center;justify-content:center;}
-  .wsc-route-id{display:flex;flex-direction:column;gap:2px;min-width:0;}
   .wsc-route-title{font-size:10.5px;color:${T.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .wsc-route input[type="radio"]{accent-color:${T.accent};width:14px;height:14px;cursor:pointer;}
   .wsc-routes-empty{font-size:11.5px;color:${T.dim};padding:2px 0 4px;}
@@ -721,10 +720,6 @@ window.__ModuleLoader__.load({
       const makeDefault = (index) => onChange(rows.map((row, i) => ({ ...row, default: i === index })))
 
       const known = new Set((sessions ?? []).map((item) => item.sessionId))
-      const titleOf = (id) => {
-        const found = (sessions ?? []).find((item) => item.sessionId === id)
-        return found === undefined ? '' : found.title ?? ''
-      }
 
       const byCwd = new Map()
       for (const item of sessions ?? []) {
@@ -740,10 +735,8 @@ window.__ModuleLoader__.load({
         }))
         .sort((a, b) => b.items.length - a.items.length)
 
-      const stamp = (item) =>
-        `${new Date(item.updatedAt).toLocaleString()}${
-          item.blank === true ? ' · 空' : item.running === true ? ' · 运行中' : ''
-        }`
+      const nameOf = (item) =>
+        item.title === undefined || item.title === '' ? `(无标题) ${item.sessionId.slice(0, 12)}…` : item.title
 
       return h(
         'div',
@@ -769,49 +762,40 @@ window.__ModuleLoader__.load({
                   onChange: () => makeDefault(index),
                 }),
               ),
-              h(
-                'div',
-                { className: 'wsc-route-id' },
-                custom
-                  ? h('input', {
-                      className: 'wsc-input',
+              custom
+                ? h('input', {
+                    className: 'wsc-input',
+                    value: row.id ?? '',
+                    placeholder: '手填 sessionId',
+                    style: { fontFamily: 'ui-monospace, monospace', maxWidth: 'none' },
+                    onChange: (event) => setRow(index, { id: event.target.value }),
+                  })
+                : h(
+                    'select',
+                    {
+                      className: 'wsc-select wsc-route-select',
                       value: row.id ?? '',
-                      placeholder: '手填 sessionId',
-                      style: { fontFamily: 'ui-monospace, monospace', maxWidth: 'none' },
-                      onChange: (event) => setRow(index, { id: event.target.value }),
-                    })
-                  : h(
-                      'select',
-                      {
-                        className: 'wsc-select wsc-route-select',
-                        value: row.id ?? '',
-                        onChange: (event) => {
-                          const next = event.target.value
-                          if (next === '__custom__') {
-                            setRow(index, { custom: true })
-                            return
-                          }
-                          setRow(index, { custom: false, id: next })
-                        },
+                      onChange: (event) => {
+                        const next = event.target.value
+                        if (next === '__custom__') {
+                          setRow(index, { custom: true })
+                          return
+                        }
+                        setRow(index, { custom: false, id: next })
                       },
-                      h('option', { value: '' }, '选择会话…'),
-                      groups.map((group) =>
-                        h(
-                          'optgroup',
-                          { key: group.cwd, label: `${group.label}（${group.items.length}）` },
-                          group.items.map((item) =>
-                            h(
-                              'option',
-                              { key: item.sessionId, value: item.sessionId },
-                              `${item.title || '(无标题)'} · ${stamp(item)}`,
-                            ),
-                          ),
+                    },
+                    h('option', { value: '' }, '选择会话…'),
+                    groups.map((group) =>
+                      h(
+                        'optgroup',
+                        { key: group.cwd, label: `${group.label}（${group.items.length}）` },
+                        group.items.map((item) =>
+                          h('option', { key: item.sessionId, value: item.sessionId }, nameOf(item)),
                         ),
                       ),
-                      h('option', { value: '__custom__' }, '手填 sessionId…'),
                     ),
-                h('div', { className: 'wsc-route-title' }, titleOf(row.id) || (custom ? '手填' : '—')),
-              ),
+                    h('option', { value: '__custom__' }, '手填 sessionId…'),
+                  ),
               h('input', {
                 className: 'wsc-input',
                 value: row.label ?? '',
