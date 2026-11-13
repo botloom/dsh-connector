@@ -325,7 +325,20 @@ window.__ModuleLoader__.load({
       .wsc-side-title{font-size:11px;font-weight:600;letter-spacing:.055em;text-transform:uppercase;color:${T.dim};}
       .wsc-side-actions{display:flex;gap:4px;}
       .wsc-side-list{flex:1;overflow-y:auto;padding:2px 10px 14px;}
-      .wsc-group{font-size:11px;font-weight:600;letter-spacing:.045em;
+      .wsc-peers{padding:8px 10px 10px;border-bottom:1px solid var(--wsc-hair);}
+  .wsc-peers-head{display:flex;align-items:baseline;gap:8px;font-size:11px;font-weight:600;
+  letter-spacing:.04em;text-transform:uppercase;color:${T.dim};margin-bottom:6px;}
+  .wsc-peers-count{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none;}
+  .wsc-peers-error{font-size:11.5px;color:${T.dim};}
+  .wsc-peer{display:flex;gap:8px;align-items:flex-start;width:100%;border:0;background:transparent;
+  text-align:left;padding:4px 2px;border-radius:6px;cursor:pointer;font:inherit;color:inherit;}
+  .wsc-peer:hover{background:var(--wsc-hover);}
+  .wsc-peer-dot{width:7px;height:7px;border-radius:50%;margin-top:5px;flex-shrink:0;background:${T.dim};}
+  .wsc-peer-dot[data-on="true"]{background:${T.ok};box-shadow:0 0 0 3px rgba(52,199,89,.16);}
+  .wsc-peer-body{display:flex;flex-direction:column;gap:1px;min-width:0;}
+  .wsc-peer-name{font-size:12px;font-weight:500;}
+  .wsc-peer-cwd,.wsc-peer-caps{font-size:10.5px;color:${T.dim};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .wsc-group{font-size:11px;font-weight:600;letter-spacing:.045em;
         color:color-mix(in srgb,${T.dim} 88%,transparent);padding:14px 8px 5px;text-transform:uppercase;}
       .wsc-row{display:flex;align-items:center;gap:10px;width:100%;padding:7px 9px;border:0;
         border-radius:9px;background:transparent;color:${T.text};text-align:left;cursor:pointer;
@@ -716,6 +729,59 @@ window.__ModuleLoader__.load({
           }
         })
         .filter((row) => row.id !== '')
+    }
+
+    function PeerSection({ data, onCopy }) {
+      if (data === null || data === undefined) return null
+      if (data.ok !== true) {
+        return h(
+          'div',
+          { className: 'wsc-peers' },
+          h('div', { className: 'wsc-peers-head' }, '跨机节点'),
+          h('div', { className: 'wsc-peers-error' }, data.error ?? '读取失败'),
+        )
+      }
+      const peers = Array.isArray(data.peers) ? data.peers : []
+      if (peers.length === 0) return null
+      const online = peers.filter((item) => item.online === true).length
+
+      return h(
+        'div',
+        { className: 'wsc-peers' },
+        h(
+          'div',
+          { className: 'wsc-peers-head' },
+          h('span', null, '跨机节点'),
+          h('span', { className: 'wsc-peers-count' }, `${online}/${peers.length} 在线`),
+        ),
+        peers.map((item) =>
+          h(
+            'button',
+            {
+              key: item.name,
+              type: 'button',
+              className: 'wsc-peer',
+              title: '点击复制节点名',
+              onClick: () => onCopy(item.name),
+            },
+            h('span', { className: 'wsc-peer-dot', 'data-on': item.online === true ? 'true' : 'false' }),
+            h(
+              'span',
+              { className: 'wsc-peer-body' },
+              h('span', { className: 'wsc-peer-name' }, item.name),
+              item.cwd === '' ? null : h('span', { className: 'wsc-peer-cwd' }, item.cwd),
+              Array.isArray(item.capabilities) && item.capabilities.length > 0
+                ? h(
+                    'span',
+                    { className: 'wsc-peer-caps' },
+                    item.capabilities.slice(0, 3).join(' · '),
+                    item.capabilities.length > 3 ? ' …' : '',
+                  )
+                : null,
+            ),
+          ),
+        ),
+      )
     }
 
     function RouteTable({ value, sessions, onChange }) {
@@ -1486,6 +1552,7 @@ window.__ModuleLoader__.load({
       const [status, setStatus] = useState({})
       const [toast, setToast] = useState(null)
       const [menu, setMenu] = useState(null)
+      const [peerData, setPeerData] = useState(null)
       const searchRef = useRef(null)
 
       const notify = useCallback((message) => {
@@ -1510,6 +1577,24 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         load()
       }, [load])
+
+      useEffect(() => {
+        let alive = true
+        const tick = async () => {
+          try {
+            const payload = await request('/peers')
+            if (alive) setPeerData(payload)
+          } catch (error) {
+            if (alive) setPeerData({ ok: false, error: `${error?.message ?? error}` })
+          }
+        }
+        tick()
+        const timer = setInterval(tick, 15000)
+        return () => {
+          alive = false
+          clearInterval(timer)
+        }
+      }, [])
 
       const kinds = useMemo(() => manifestsOf(state), [state])
       const connections = state?.connections ?? []
@@ -1679,6 +1764,13 @@ window.__ModuleLoader__.load({
         h(
           'div',
           { className: 'wsc-side-list' },
+          h(PeerSection, {
+            data: peerData,
+            onCopy: (name) => {
+              navigator.clipboard?.writeText(name).catch(() => {})
+              notify(`已复制节点名：${name}，输入 /peer ${name} …`)
+            },
+          }),
           loading
             ? [0, 1, 2, 3].map((index) => h('div', { key: index, className: 'wsc-skel' }))
             : grouped.map((group) =>

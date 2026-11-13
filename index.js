@@ -973,9 +973,19 @@ export async function apply(ctx, config = {}) {
   // 管理面板的 JSON 接口；只有 Web 半边（或带 webServer 的组合）才注册。
   // 注意：新版 DSH 里 webServer 可能比插件晚就绪，所以优先用响应式 inject，
   // 直接 ctx.get() 只在 inject 不可用时兜底。
+  const peerSnapshot = async () => {
+    try {
+      const { connection } = requirePeer()
+      const peers = await listPeers(connection)
+      return { ok: true, peers }
+    } catch (error) {
+      return { ok: false, error: `${error?.message ?? error}` }
+    }
+  }
+
   const registerApi = (server) => {
     if (server === undefined || server === null) return
-    const handler = createApiHandler(ctx, state)
+    const handler = createApiHandler(ctx, state, { peerSnapshot })
     ctx.effect(() => server.register({ kind: 'prefix', path: API_PREFIX, handler }))
   }
 
